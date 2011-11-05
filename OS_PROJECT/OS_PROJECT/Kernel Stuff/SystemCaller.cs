@@ -55,12 +55,12 @@ namespace OS_PROJECT
             }
         }
 
-        public static void CoreDump(Driver k)
+        public static void CoreDump(Driver k, int batchNumber)
         {
-            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDump.txt", false);
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
-            Console.WriteLine("CoreDump.txt");
+            Console.WriteLine("CoreDumpBatch" + batchNumber + ".txt");
             Console.WriteLine("--------------------------------------");
             for (uint i = 0; i < k.RAM.GetMemorySize(); i++)
             {
@@ -87,16 +87,21 @@ namespace OS_PROJECT
             writer.Close();
         }
 
-        public static void CoreDumpByProccess(Driver k)
+        public static void CoreDumpByProccess(Driver k, int batchNumber)
         {
-            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcs.txt", false);
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcsBatch" + batchNumber + ".txt", false);
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
-            Console.WriteLine("CoreDumpProcs.txt");
+            Console.WriteLine("CoreDumpProcsBatch" + batchNumber + ".txt");
             Console.WriteLine("--------------------------------------");
             foreach (Process p in k.deadProcesses)
             {
                 writer.WriteLine("--------------------------------------");
+                if (p.PCB.ProcessID > 9)
+                {
+                    writer.WriteLine("----PROCESS #" + p.PCB.ProcessID + "-----------------------");
+                }
+                else
                 writer.WriteLine("----PROCESS #"+p.PCB.ProcessID+"------------------------");
                 writer.WriteLine("--------------------------------------");
                 for (uint i = p.PCB.MemoryAddress; i < (p.PCB.MemoryAddress + p.PCB.JobLength); i++)

@@ -103,8 +103,9 @@ namespace OS_PROJECT
                 }
             }
 
-            SystemCaller.CoreDump(this);
-            SystemCaller.CoreDumpByProccess(this);
+            SystemCaller.CoreDump(this, 1);
+            SystemCaller.CoreDumpByProccess(this, 1);
+            deadProcesses.Clear();
             shouldRun = true;
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("Loading second batch.\n");
@@ -129,6 +130,26 @@ namespace OS_PROJECT
                 cpu++;
                 cpu %= numberOfCPUs;
             }
+
+            wait = true;
+            while (wait)
+            {
+                int finished = 0;
+                foreach (CPU c in cpuList)
+                {
+                    if (!c.isActive)
+                    {
+                        finished++;
+                    }
+                }
+                if (finished == numberOfCPUs)
+                {
+                    wait = false;
+                }
+            }
+
+            SystemCaller.CoreDump(this, 2);
+            SystemCaller.CoreDumpByProccess(this, 2);
         }
 
         void RunCPUs()
