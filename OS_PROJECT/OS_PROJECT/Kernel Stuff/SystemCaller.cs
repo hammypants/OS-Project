@@ -55,6 +55,37 @@ namespace OS_PROJECT
             }
         }
 
+        public static void CoreDump(Driver k)
+        {
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDump.txt", false);
+            Console.WriteLine("--------------------------------------");
+            Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
+            Console.WriteLine("CoreDump.txt");
+            Console.WriteLine("--------------------------------------");
+            for (uint i = 0; i < k.RAM.GetMemorySize(); i++)
+            {
+                if (i < 10)
+                {
+                    writer.Write("[000" + i + "]");
+                }
+                else if (i < 100)
+                {
+                    writer.Write("[00" + i + "]");
+                }
+                else if (i < 1000)
+                {
+                    writer.Write("[0" + i + "]");
+                }
+                else
+                {
+                    writer.Write("[" + i + "]");
+                }
+                writer.Write(SystemCaller.ConvertInputDataToHexstring(k.RAM.ReadDataFromMemory(i)));
+                writer.WriteLine();
+            }
+            writer.Close();
+        }
+
         public static void DisplayMemoryOfProcess(Process p, RAM r)
         {
             for (uint iterator = p.PCB.MemoryAddress; iterator < p.PCB.JobLength; iterator++)

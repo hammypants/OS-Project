@@ -39,22 +39,13 @@ namespace OS_PROJECT
         Loader loader;
         LongTermScheduler LTS;
 
-        uint numberOfCPUs = 4;
+        int numberOfCPUs = 4;
         List<CPU> cpuList;
-
-        uint pausedCPUs = 0;
 
         bool shouldRun = true;
 
         public Driver()
-        {
-            
-        }
-
-        void CPUPausedEvent(object o, EventArgs e)
-        {
-            pausedCPUs++;
-        }
+        { }
 
         public void RunOS()
         {
@@ -70,80 +61,71 @@ namespace OS_PROJECT
 
             // Main program.
             loader.Run();
+            LTS.Run();
 
-            int counter = 0;
+            int cpu = 0;
+
             while (shouldRun)
             {
                 if (ReadyQueue.AccessQueue.Count == 0)
                 {
-                    if (LTS.NoMoreProcesses())
-                    {
-                        shouldRun = false;
-                    }
-                    else
-                    {
-                        LTS.Run();
-                    }
+                    shouldRun = false;
                 }
-                if (shouldRun == false)
+                if (cpuList[cpu].isActive == true)  
                 {
-                    break;
-                }
-                if (counter == 0)
-                {
-                    RunCPUs();
-                    counter++;
+                    // Do nothing.
                 }
                 else
                 {
-                    ResumeCPUs();
+                    // Tell the CPU to go again.
+                    cpuList[cpu].ResumeCPU();
+                }
+                cpu++;
+                cpu %= numberOfCPUs; 
+            }
+
+            bool wait = true;
+            while (wait)
+            {
+                int finished = 0;
+                foreach (CPU c in cpuList)
+                {
+                    if (!c.isActive)
+                    {
+                        finished++;
+                    }
+                }
+                if (finished == numberOfCPUs)
+                {
+                    wait = false;
                 }
             }
 
-            //string selectedOption;
-            //while (shouldRun)
-            //{
-            //    Console.WriteLine(
-            //        "Please type a command:\n"
-            //    +"[lb] will load the next batch of jobs.\n"
-            //    +"[rb] will run the next batch of jobs.\n"
-            //    +"[q] will quit the program.\n"
-            //        );
+            SystemCaller.CoreDump(this);
+            shouldRun = true;
+            Console.WriteLine("--------------------------------------");
+            Console.WriteLine("Loading second batch.\n");
+            Console.WriteLine("--------------------------------------\n");
+            LTS.Run();
 
-            //    selectedOption = Console.ReadLine();
-
-            //    switch (selectedOption)
-            //    {
-            //        case "lb":
-            //            if (NewProcessQueue.AccessQueue.Count != 0)
-            //            {
-            //                LTS.Run();
-            //            }
-            //            else
-            //            {
-            //                Console.WriteLine("Cannot load next batch-- no more jobs to run!\n");
-            //            }
-            //            break;
-            //        case "rb":
-            //            if (ReadyQueue.AccessQueue.Count != 0)
-            //            {
-            //                if (counter == 0)
-            //                    RunCPUs();
-            //                else
-            //                    ResumeCPUs();
-            //            }
-            //            else
-            //            {
-            //                Console.WriteLine("Cannot run the current batch of jobs-- there is no batch of jobs to run!\n");
-            //            }
-            //            break;
-            //        case "q":
-            //            shouldRun = false;
-            //            break;
-            //    }
-            //}
-
-            // End Run().
+            while (shouldRun)
+            {
+                if (ReadyQueue.AccessQueue.Count == 0)
+                {
+                    shouldRun = false;
+                }
+                if (cpuList[cpu].isActive == true)
+                {
+                    // Do nothing.
+                }
+                else
+                {
+                    // Tell the CPU to go again.
+                    cpuList[cpu].ResumeCPU();
+                }
+                cpu++;
+                cpu %= numberOfCPUs;
+            }
         }
 
         void RunCPUs()

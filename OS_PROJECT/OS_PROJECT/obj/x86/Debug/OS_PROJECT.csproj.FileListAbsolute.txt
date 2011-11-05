@@ -33,3 +33,8 @@ C:\Users\crichers\Downloads\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.pdb
 \\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\ResolveAssemblyReference.cache
 \\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.exe
 \\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.pdb
+C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\bin\Debug\OS_PROJECT.exe
+C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\bin\Debug\OS_PROJECT.pdb
+C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\ResolveAssemblyReference.cache
+C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.exe
+C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.pdb

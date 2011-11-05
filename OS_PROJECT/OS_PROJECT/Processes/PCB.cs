@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
 
 namespace OS_PROJECT
 {
@@ -17,6 +18,8 @@ namespace OS_PROJECT
         ProcessState processState = ProcessState.New;
         public ProcessState ProcessState
         { get { return processState; } set { processState = value; } }
+
+        public Stopwatch _waitingTime = new Stopwatch();
 
         uint ioCount = 0;
         public uint IoCount
@@ -54,16 +57,6 @@ namespace OS_PROJECT
         uint inputBufferSize;
         public uint InputBufferSize
         { get { return inputBufferSize; } set { inputBufferSize = value; } }
-
-        //uint outputBuffer;
-        //public uint OutputBuffer
-        //{ get { return outputBufferSize; } set { outputBufferSize = value; } }
-        //uint inputBuffer;
-        //public uint InputBuffer
-        //{ get { return inputBufferSize; } set { inputBufferSize = value; } }
-        //uint tempBuffer;
-        //public uint TempBuffer
-        //{ get { return tempBufferSize; } set { tempBufferSize = value; } }
 
         public uint DataBeginningVirtualAddress
         { get { return DiskAddress + InstructionLength; } }

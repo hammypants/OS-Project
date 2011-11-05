@@ -31,13 +31,11 @@ namespace OS_PROJECT
         public Process CurrentProcess
         { get { return currentProcess; } set { currentProcess = value; } }
 
-        //volatile bool _shouldStop;
-
         Thread thread;
         public Thread CPUThread
         { get { return thread; } }
 
-        ManualResetEvent _suspendEvent;
+        ManualResetEventSlim _suspendEvent;
         public bool isActive;
         int id;
         int processCounter;
@@ -64,30 +62,34 @@ namespace OS_PROJECT
             cache = new uint[1];
             this.id = id;
             thread = new Thread(new ThreadStart(this.Run));
-            _suspendEvent = new ManualResetEvent(true);
+            _suspendEvent = new ManualResetEventSlim(false);
+            thread.Start();
         }
 
         public void RunCPU()
         {
             thread.Start();
+            isActive = true;
         }
 
         public void PauseCPU()
         {
+            Console.WriteLine("Pausing CPU " + id + " -- The number of processes currently completed by this CPU is : " + processCounter + ".\n");
             _suspendEvent.Reset();
             isActive = false;
         }
 
-        public event EventHandler<EventArgs> Paused;
+        //public event EventHandler<EventArgs> Paused;
 
-        protected internal virtual void OnPause()
-        {
-            if (Paused != null)
-            { Paused(this, new EventArgs()); }
-        }
+        //protected internal virtual void OnPause()
+        //{
+        //    if (Paused != null)
+        //    { Paused(this, new EventArgs()); }
+        //}
 
         public void ResumeCPU()
         {
+            Console.WriteLine("Awakening CPU " + id + ".\n");
             _suspendEvent.Set();
             isActive = true;
         }
@@ -96,15 +98,16 @@ namespace OS_PROJECT
         {
             while (true)
             {
-                _suspendEvent.WaitOne(Timeout.Infinite);
-                totalElapsedTime.Start();
+                _suspendEvent.Wait(Timeout.Infinite);
+
                 if (!HasProcess())
                 {
                     GetProcess();
-                }
-                else
-                {
-                    PauseCPU();
+
+                    if (!HasProcess())
+                    {
+                        PauseCPU();
+                    }
                 }
                 while (HasProcess())
                 {
@@ -112,8 +115,6 @@ namespace OS_PROJECT
                     Decode();
                     Execute();
                 }
-                totalElapsedTime.Stop();
-                Console.WriteLine("Elapsed time for CPU " + id + " to run " + processCounter + " processes was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + ".");
             }
         }
 
@@ -124,31 +125,24 @@ namespace OS_PROJECT
                 kernel.Dispatcher.DispatchProcess(this);
                 if (currentProcess != null)
                 {
+                    currentProcess.PCB._waitingTime.Stop();
+                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " spent " + currentProcess.PCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
                     processCounter++;
-                    CheckCache();
-                }
-            }
-        }
-
-        void CheckCache()
-        {
-            cache = new uint[currentProcess.PCB.JobLength];
-            bool filled = false;
-            while (filled == false)
-            {
-                lock(cacheLock)
-                {
                     FillCache();
-                    filled = true;
+                    totalElapsedTime.Start();
                 }
             }
         }
 
         void FillCache()
         {
-            for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
+            cache = new uint[currentProcess.PCB.JobLength];
+            lock (cacheLock)
             {
-                cache[iterator] = RAM.ReadDataFromMemory(currentProcess.PCB.MemoryAddress + iterator);
+                for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
+                {
+                    cache[iterator] = RAM.ReadDataFromMemory(currentProcess.PCB.MemoryAddress + iterator);
+                }
             }
         }
 
@@ -558,11 +552,12 @@ namespace OS_PROJECT
 
         void ProcessFinished()
         {
+            totalElapsedTime.Stop();
             SaveProcessStatus();
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
+            Console.WriteLine("Elapsed time for CPU " + id + " to run job " + cpuPCB.ProcessID + " was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + "ms.\n");
             currentProcess = null;
-            Console.WriteLine("CPU " + id + " finished.");
-            PauseCPU();
+            //PauseCPU();
         }
 
         public bool HasProcess()

@@ -16,6 +16,8 @@ namespace OS_PROJECT
 
         List<Process> batchList = new List<Process>();
 
+        public int batch = 0;
+
         public LongTermScheduler(Driver k)
         {
             kernel = k;
@@ -51,6 +53,7 @@ namespace OS_PROJECT
                 Process p = NPQ.AccessQueue.Dequeue();
                 batchList.Add(p);
             }
+            batch++;
         }
 
         void SortBatch()
@@ -89,6 +92,7 @@ namespace OS_PROJECT
                     for (int i = 0; (i < freeSlots) && WQ.AccessQueue.Count != 0; i++)
                     {
                         RQ.AccessQueue.Enqueue(WQ.AccessQueue.Dequeue());
+                        RQ.AccessQueue.ElementAt<Process>(i).PCB._waitingTime.Start();
                     }
                 }
             }
