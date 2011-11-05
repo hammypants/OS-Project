@@ -81,7 +81,45 @@ namespace OS_PROJECT
                     writer.Write("[" + i + "]");
                 }
                 writer.Write(SystemCaller.ConvertInputDataToHexstring(k.RAM.ReadDataFromMemory(i)));
+                //writer.Write(k.RAM.ReadDataFromMemory(i));
                 writer.WriteLine();
+            }
+            writer.Close();
+        }
+
+        public static void CoreDumpByProccess(Driver k)
+        {
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcs.txt", false);
+            Console.WriteLine("--------------------------------------");
+            Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
+            Console.WriteLine("CoreDumpProcs.txt");
+            Console.WriteLine("--------------------------------------");
+            foreach (Process p in k.deadProcesses)
+            {
+                writer.WriteLine("--------------------------------------");
+                writer.WriteLine("----PROCESS #"+p.PCB.ProcessID+"------------------------");
+                writer.WriteLine("--------------------------------------");
+                for (uint i = p.PCB.MemoryAddress; i < (p.PCB.MemoryAddress + p.PCB.JobLength); i++)
+                {
+                    if (i < 10)
+                    {
+                        writer.Write("[000" + i + "]");
+                    }
+                    else if (i < 100)
+                    {
+                        writer.Write("[00" + i + "]");
+                    }
+                    else if (i < 1000)
+                    {
+                        writer.Write("[0" + i + "]");
+                    }
+                    else
+                    {
+                        writer.Write("[" + i + "]");
+                    }
+                    writer.Write(SystemCaller.ConvertInputDataToHexstring(k.RAM.ReadDataFromMemory(i)));
+                    writer.WriteLine();
+                }
             }
             writer.Close();
         }

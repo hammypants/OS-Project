@@ -554,6 +554,7 @@ namespace OS_PROJECT
         {
             totalElapsedTime.Stop();
             SaveProcessStatus();
+            kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
             Console.WriteLine("Elapsed time for CPU " + id + " to run job " + cpuPCB.ProcessID + " was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + "ms.\n");
             currentProcess = null;

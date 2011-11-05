@@ -23,6 +23,8 @@ namespace OS_PROJECT
         public ReadyQueue ReadyQueue
         { get { return readyQueue; } }
 
+        public List<Process> deadProcesses = new List<Process>();
+
         Disk disk = new Disk();
         public Disk Disk
         { get { return disk; } }
@@ -102,6 +104,7 @@ namespace OS_PROJECT
             }
 
             SystemCaller.CoreDump(this);
+            SystemCaller.CoreDumpByProccess(this);
             shouldRun = true;
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("Loading second batch.\n");
