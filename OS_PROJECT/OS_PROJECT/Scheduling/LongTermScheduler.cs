@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Linq;
 
 namespace OS_PROJECT
 {
@@ -34,8 +35,8 @@ namespace OS_PROJECT
             Console.WriteLine("BATCH COUNT: " + batchList.Count);
             SortBatch();
             InsertBatchInMemory();
-            AddNewProcessesToWaitingQueue();
-            AddWaitingProcessesToReadyQueue();
+            //AddNewProcessesToWaitingQueue();
+            //AddWaitingProcessesToReadyQueue();
             ClearBatch();
         }
 
@@ -58,7 +59,25 @@ namespace OS_PROJECT
 
         void SortBatch()
         {
-            // First come first serve. Automatic.
+            foreach (Process p in batchList)
+            {
+                RQ.AccessQueue.Enqueue(p);
+            }
+            RQ.AccessQueue.OrderBy<Process, uint>(ExtractPID);
+
+            //// First come first serve. Automatic.
+            //var sorted = from process in batchList
+            //        orderby process.PCB.Priority
+            //        select process;
+            //foreach (Process p in sorted)
+            //{
+            //    RQ.AccessQueue.Enqueue(p);
+            //}
+        }
+
+        uint ExtractPID(Process p)
+        {
+            return p.PCB.Priority;
         }
 
         void InsertBatchInMemory()

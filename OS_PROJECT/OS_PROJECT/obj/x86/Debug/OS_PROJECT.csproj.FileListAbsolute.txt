@@ -38,3 +38,8 @@ C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PR
 C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\ResolveAssemblyReference.cache
 C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.exe
 C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.pdb
+H:\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.exe
+H:\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\OS_PROJECT.pdb
+H:\OS-Project\OS_PROJECT\OS_PROJECT\bin\Debug\OS_PROJECT.exe
+H:\OS-Project\OS_PROJECT\OS_PROJECT\bin\Debug\OS_PROJECT.pdb
+H:\OS-Project\OS_PROJECT\OS_PROJECT\obj\x86\Debug\ResolveAssemblyReference.cache
