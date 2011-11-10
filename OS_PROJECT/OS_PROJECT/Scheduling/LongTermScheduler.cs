@@ -33,10 +33,10 @@ namespace OS_PROJECT
         {
             GetBatch();
             Console.WriteLine("BATCH COUNT: " + batchList.Count);
-            SortBatch();
+            //SortBatch();
             InsertBatchInMemory();
-            //AddNewProcessesToWaitingQueue();
-            //AddWaitingProcessesToReadyQueue();
+            AddNewProcessesToWaitingQueue();
+            AddWaitingProcessesToReadyQueue();
             ClearBatch();
         }
 

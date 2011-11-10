@@ -21,6 +21,10 @@ namespace OS_PROJECT
 
         public Stopwatch _waitingTime = new Stopwatch();
 
+        public double completionTime;
+
+        public double waitingTime;
+
         uint ioCount = 0;
         public uint IoCount
         { get { return ioCount; } set { ioCount = value; } }

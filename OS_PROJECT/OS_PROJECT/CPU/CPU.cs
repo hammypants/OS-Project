@@ -125,8 +125,9 @@ namespace OS_PROJECT
                 kernel.Dispatcher.DispatchProcess(this);
                 if (currentProcess != null)
                 {
-                    currentProcess.PCB._waitingTime.Stop();
-                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " spent " + currentProcess.PCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
+                    cpuPCB._waitingTime.Stop();
+                    cpuPCB.waitingTime = cpuPCB._waitingTime.Elapsed.TotalMilliseconds;
+                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
                     processCounter++;
                     FillCache();
                     totalElapsedTime.Start();
@@ -553,12 +554,12 @@ namespace OS_PROJECT
         void ProcessFinished()
         {
             totalElapsedTime.Stop();
+            cpuPCB.completionTime = totalElapsedTime.Elapsed.TotalMilliseconds;
             SaveProcessStatus();
             kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
             Console.WriteLine("Elapsed time for CPU " + id + " to run job " + cpuPCB.ProcessID + " was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + "ms.\n");
             currentProcess = null;
-            //PauseCPU();
         }
 
         public bool HasProcess()
