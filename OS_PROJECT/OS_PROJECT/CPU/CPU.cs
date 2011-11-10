@@ -79,14 +79,6 @@ namespace OS_PROJECT
             isActive = false;
         }
 
-        //public event EventHandler<EventArgs> Paused;
-
-        //protected internal virtual void OnPause()
-        //{
-        //    if (Paused != null)
-        //    { Paused(this, new EventArgs()); }
-        //}
-
         public void ResumeCPU()
         {
             Console.WriteLine("Awakening CPU " + id + ".\n");
