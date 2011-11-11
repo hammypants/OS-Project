@@ -119,7 +119,8 @@ namespace OS_PROJECT
                 {
                     cpuPCB._waitingTime.Stop();
                     cpuPCB.waitingTime = cpuPCB._waitingTime.Elapsed.TotalMilliseconds;
-                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
+                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " (Priority: " + currentProcess.PCB.Priority + " | Instr. Length: " + currentProcess.PCB.InstructionLength +
+                        ") spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
                     processCounter++;
                     FillCache();
                     totalElapsedTime.Start();

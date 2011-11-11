@@ -33,10 +33,10 @@ namespace OS_PROJECT
         {
             GetBatch();
             Console.WriteLine("BATCH COUNT: " + batchList.Count);
-            //SortBatch();
+            SortBatch("SJF");
             InsertBatchInMemory();
-            AddNewProcessesToWaitingQueue();
-            AddWaitingProcessesToReadyQueue();
+            //AddNewProcessesToWaitingQueue();
+            //AddWaitingProcessesToReadyQueue();
             ClearBatch();
         }
 
@@ -57,27 +57,47 @@ namespace OS_PROJECT
             batch++;
         }
 
-        void SortBatch()
+        void SortBatch(string algorithm)
         {
-            foreach (Process p in batchList)
+            switch (algorithm)
             {
-                RQ.AccessQueue.Enqueue(p);
+                case ("Priority"):
+                    batchList.Sort(ComparePriority);
+                    foreach (Process p in batchList)
+                    {
+                        RQ.AccessQueue.Enqueue(p);
+                        p.PCB._waitingTime.Start();
+                    }
+                    break;
+                case("SJF"):
+                    batchList.Sort(CompareJob);
+                    foreach (Process p in batchList)
+                    {
+                        RQ.AccessQueue.Enqueue(p);
+                        p.PCB._waitingTime.Start();
+                    }
+                    break;
+                default:
+                    break;
             }
-            RQ.AccessQueue.OrderBy<Process, uint>(ExtractPID);
-
-            //// First come first serve. Automatic.
-            //var sorted = from process in batchList
-            //        orderby process.PCB.Priority
-            //        select process;
-            //foreach (Process p in sorted)
-            //{
-            //    RQ.AccessQueue.Enqueue(p);
-            //}
         }
 
-        uint ExtractPID(Process p)
+        private int ComparePriority(Process p1, Process p2)
         {
-            return p.PCB.Priority;
+            if (p1.PCB.Priority > p2.PCB.Priority)
+                return -1;
+            else if (p1.PCB.Priority == p2.PCB.Priority)
+                return 0;
+            else return 1;
+        }
+
+        private int CompareJob(Process p1, Process p2)
+        {
+            if (p1.PCB.InstructionLength > p2.PCB.InstructionLength)
+                return 1;
+            else if (p1.PCB.InstructionLength == p2.PCB.InstructionLength)
+                return 0;
+            else return -1;
         }
 
         void InsertBatchInMemory()

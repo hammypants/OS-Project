@@ -57,8 +57,8 @@ namespace OS_PROJECT
 
         public static void CoreDump(Driver k, int batchNumber)
         {
-            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
-                //@"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
+            StreamWriter writer = new StreamWriter(//@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
+                @"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
             Console.WriteLine("CoreDumpBatch" + batchNumber + ".txt");
@@ -90,8 +90,8 @@ namespace OS_PROJECT
 
         public static void CoreDumpByProccess(Driver k, int batchNumber)
         {
-            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcsBatch" + batchNumber + ".txt", false);
-                //@"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcsBatch" + batchNumber + ".txt", false);
+            StreamWriter writer = new StreamWriter(//@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcsBatch" + batchNumber + ".txt", false);
+                @"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpProcsBatch" + batchNumber + ".txt", false);
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
             Console.WriteLine("CoreDumpProcsBatch" + batchNumber + ".txt");
