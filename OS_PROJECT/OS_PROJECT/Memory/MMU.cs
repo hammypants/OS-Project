@@ -5,10 +5,9 @@ using System.Text;
 
 namespace OS_PROJECT
 {
-    public class MMU
+    class MMU
     {
         private static MMU singleton;
-
         Driver kernel;
 
         static FrameTableLocation[] frame_table = new FrameTableLocation[256];
@@ -22,10 +21,13 @@ namespace OS_PROJECT
 
         private MMU(Driver k)
         {
-            singleton.kernel = k;
+            kernel = k;
+            for (uint iterator = 0; iterator < 256; iterator++)
+            {
+                frame_table[iterator].Free = true;
+                frame_table[iterator].Page = 513;
+            }
         }
-
-        private uint[] freeFrameList;
 
         public static uint Read(uint address)
         {
@@ -41,7 +43,7 @@ namespace OS_PROJECT
         struct FrameTableLocation
         {
             public uint Page;
-            public bool Free = true;
+            public bool Free;
         }
     }
 }

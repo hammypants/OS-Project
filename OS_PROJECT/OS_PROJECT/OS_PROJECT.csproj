@@ -47,6 +47,7 @@
     <Compile Include="Kernel Stuff\Driver.cs" />
     <Compile Include="Kernel Stuff\SystemCaller.cs" />
     <Compile Include="Memory\MMU.cs" />
+    <Compile Include="Memory\PageTable.cs" />
     <Compile Include="Processes\PCB.cs" />
     <Compile Include="Processes\Register.cs" />
     <Compile Include="Queues\NewProcessQueue.cs" />
