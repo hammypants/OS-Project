@@ -106,9 +106,6 @@ namespace OS_PROJECT
             p.PCB.OutputBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);
-            //p.PCB.OutputBuffer = UInt32.Parse("C", NumberStyles.HexNumber);
-            //p.PCB.TempBuffer = UInt32.Parse("C", NumberStyles.HexNumber);
-            //p.PCB.InputBuffer = UInt32.Parse("14", NumberStyles.HexNumber); 
             p.PCB.DiskAddress = startAddress;
             Console.WriteLine("Disk Address: " + p.PCB.DiskAddress.ToString());
             Console.WriteLine("Input Buffer: " +p.PCB.InputBufferSize.ToString());

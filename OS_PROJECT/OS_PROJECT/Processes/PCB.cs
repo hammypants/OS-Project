@@ -15,6 +15,8 @@ namespace OS_PROJECT
     {
         public Register[] register = new Register[16];
 
+        public uint[] PageTable = new uint[4];
+
         ProcessState processState = ProcessState.New;
         public ProcessState ProcessState
         { get { return processState; } set { processState = value; } }

@@ -35,21 +35,12 @@ namespace OS_PROJECT
             Console.WriteLine("BATCH COUNT: " + batchList.Count);
             SortBatch("SJF");
             InsertBatchInMemory();
-            //AddNewProcessesToWaitingQueue();
-            //AddWaitingProcessesToReadyQueue();
             ClearBatch();
-        }
-
-        public bool NoMoreProcesses()
-        {
-            if (NPQ.AccessQueue.Count == 0)
-            { return true; }
-            return false;
         }
 
         void GetBatch()
         {
-            for (int i = 0; i < 15; i++)
+            for (int i = 0; i < 30; i++)
             {
                 Process p = NPQ.AccessQueue.Dequeue();
                 batchList.Add(p);
@@ -113,34 +104,9 @@ namespace OS_PROJECT
             }
         }
 
-        void AddNewProcessesToWaitingQueue()
-        {
-            foreach (Process p in batchList)
-            {
-                WQ.AccessQueue.Enqueue(p);
-            }
-        }
-
-        void AddWaitingProcessesToReadyQueue()
-        {
-            if (WQ.AccessQueue.Count != 0)
-            {
-                if (RQ.AccessQueue.Count < RQ.Limit)
-                {
-                    int freeSlots = (int)RQ.Limit - RQ.AccessQueue.Count;
-                    for (int i = 0; (i < freeSlots) && WQ.AccessQueue.Count != 0; i++)
-                    {
-                        RQ.AccessQueue.Enqueue(WQ.AccessQueue.Dequeue());
-                        RQ.AccessQueue.ElementAt<Process>(i).PCB._waitingTime.Start();
-                    }
-                }
-            }
-        }
-
         void ClearBatch()
         {
             batchList.Clear();
         }
-        //
     }
 }

@@ -51,6 +51,7 @@ namespace OS_PROJECT
 
         public void RunOS()
         {
+            MMU.Instantiate(this);
             loader = new Loader(this);
             LTS = new LongTermScheduler(this);
             dispatcher = new Dispatcher(this);
@@ -73,7 +74,7 @@ namespace OS_PROJECT
                 {
                     shouldRun = false;
                 }
-                if (cpuList[cpu].isActive == true)  
+                if (cpuList[cpu].isActive == true)
                 {
                     // Do nothing.
                 }
@@ -83,7 +84,7 @@ namespace OS_PROJECT
                     cpuList[cpu].ResumeCPU();
                 }
                 cpu++;
-                cpu %= numberOfCPUs; 
+                cpu %= numberOfCPUs;
             }
 
             bool wait = true;
@@ -102,56 +103,6 @@ namespace OS_PROJECT
                     wait = false;
                 }
             }
-
-            SystemCaller.CoreDump(this, 1);
-            SystemCaller.CoreDumpByProccess(this, 1);
-            //SystemCaller.CoreDumpProcessCompletionWaitingTimes(this, 1);
-            deadProcesses.Clear();
-            shouldRun = true;
-            Console.WriteLine("--------------------------------------");
-            Console.WriteLine("Loading second batch.\n");
-            Console.WriteLine("--------------------------------------\n");
-            LTS.Run();
-
-            while (shouldRun)
-            {
-                if (ReadyQueue.AccessQueue.Count == 0)
-                {
-                    shouldRun = false;
-                }
-                if (cpuList[cpu].isActive == true)
-                {
-                    // Do nothing.
-                }
-                else
-                {
-                    // Tell the CPU to go again.
-                    cpuList[cpu].ResumeCPU();
-                }
-                cpu++;
-                cpu %= numberOfCPUs;
-            }
-
-            wait = true;
-            while (wait)
-            {
-                int finished = 0;
-                foreach (CPU c in cpuList)
-                {
-                    if (!c.isActive)
-                    {
-                        finished++;
-                    }
-                }
-                if (finished == numberOfCPUs)
-                {
-                    wait = false;
-                }
-            }
-
-            SystemCaller.CoreDump(this, 2);
-            SystemCaller.CoreDumpByProccess(this, 2);
-            //SystemCaller.CoreDumpProcessCompletionWaitingTimes(this, 2);
         }
 
         void RunCPUs()
