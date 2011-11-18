@@ -10,7 +10,7 @@ namespace OS_PROJECT
         private static MMU singleton;
         Driver kernel;
 
-        static FrameTableLocation[] frame_table = new FrameTableLocation[256];
+        public static FrameTableLocation[] FrameTable = new FrameTableLocation[256];
 
         public static uint FreeFrames = 256;
 
@@ -24,8 +24,8 @@ namespace OS_PROJECT
             kernel = k;
             for (uint iterator = 0; iterator < 256; iterator++)
             {
-                frame_table[iterator].Free = true;
-                frame_table[iterator].Page = 513;
+                FrameTable[iterator].Free = true;
+                FrameTable[iterator].Page = 513;
             }
         }
 
