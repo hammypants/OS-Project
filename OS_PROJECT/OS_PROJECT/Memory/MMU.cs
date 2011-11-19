@@ -10,7 +10,7 @@ namespace OS_PROJECT
         private static MMU singleton;
         Driver kernel;
 
-        public static FrameTableLocation[] FrameTable = new FrameTableLocation[256];
+        static FrameTableLocation[] FrameTable = new FrameTableLocation[256];
 
         public static uint FreeFrames = 256;
 

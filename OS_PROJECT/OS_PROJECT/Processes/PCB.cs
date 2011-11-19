@@ -15,7 +15,9 @@ namespace OS_PROJECT
     {
         public Register[] register = new Register[16];
 
-        public uint[] PageTable = new uint[4];
+        public PageTable PageTable = new PageTable();
+
+        public uint SeparationOffset;
 
         ProcessState processState = ProcessState.New;
         public ProcessState ProcessState

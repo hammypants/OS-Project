@@ -23,6 +23,7 @@ namespace OS_PROJECT
         uint inputBuffSize = 14;
         uint addressCounter = 0;
         uint currentJobStartAddress = 0;
+        uint offset = 0;
 
         public Loader(Driver k)
         {
@@ -61,11 +62,60 @@ namespace OS_PROJECT
                     priorityNum = Convert.ToUInt32(words[4], 16);
                     currentJobStartAddress = addressCounter;
 
-                    //read then send numWords to screen/disk
-                    for (int i = 1; i <= numWords; i++)
+                    if (numWords % 4 == 0)
                     {
-                        disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
+                        offset = 0;
+                        for (int i = 1; i <= numWords; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
+                        }
                     }
+
+                    if (numWords % 4 == 1)
+                    {
+                        offset = 1;
+                        for (int i = 1; i <= numWords; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
+                        }
+
+                        for (int i = 1; i <= 3; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, 0);
+                        }
+
+                    }
+
+                    if (numWords % 4 == 2)
+                    {
+                        offset = 2;
+                        for (int i = 1; i <= numWords; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
+                        }
+
+                        for (int i = 1; i <= 2; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, 0);
+                        }
+
+                    }
+
+                    if (numWords % 4 == 3)
+                    {
+                        offset = 3;
+                        for (int i = 1; i <= numWords; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
+                        }
+
+                        for (int i = 1; i <= 1; i++)
+                        {
+                            disk.WriteDataToDisk(addressCounter++, 0);
+                        }
+
+                    }
+
                 }
 
                 // if data do ...
@@ -74,8 +124,6 @@ namespace OS_PROJECT
                     numWords = 44; //one;
                     otptBuffSize = Convert.ToUInt32(words[3], 16);
                     tempBuffSize = Convert.ToUInt32(words[4], 16);
-
-                    //Console.WriteLine("Data#");
 
                     for (int i = 1; i <= numWords; i++)
                     {
@@ -87,7 +135,7 @@ namespace OS_PROJECT
                 if (string.Compare(jobDataEnd, end) == 1)
                 {
                     Console.WriteLine("Job: " + jobNum);
-                    SpawnProcess(jobNum, priorityNum, numWords, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress);
+                    SpawnProcess(jobNum, priorityNum, numWords, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress, offset);
                 }
             }
             file.Close();
@@ -97,7 +145,7 @@ namespace OS_PROJECT
             priorityNum = 0;
         }
 
-        void SpawnProcess(uint pID, uint priority, uint numWords, uint outB, uint inB, uint tempB, uint startAddress)
+        void SpawnProcess(uint pID, uint priority, uint numWords, uint outB, uint inB, uint tempB, uint startAddress, uint offset)
         {
             Process p = new Process(new PCB());
             p.PCB.ProcessID = pID;
@@ -107,12 +155,14 @@ namespace OS_PROJECT
             p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);
             p.PCB.DiskAddress = startAddress;
+            p.PCB.SeparationOffset = offset;
             Console.WriteLine("Disk Address: " + p.PCB.DiskAddress.ToString());
             Console.WriteLine("Input Buffer: " +p.PCB.InputBufferSize.ToString());
             Console.WriteLine("Instruction Length: " + p.PCB.InstructionLength.ToString());
             Console.WriteLine("Output Buffer: " + p.PCB.OutputBufferSize.ToString());
             Console.WriteLine("Temp Buffer: " + p.PCB.TempBufferSize.ToString());
             Console.WriteLine("Priority: " + p.PCB.Priority.ToString());
+            Console.WriteLine("Sep. Offset: " + p.PCB.SeparationOffset.ToString());
             NPQ.AccessQueue.Enqueue(p);
             Console.WriteLine("Process spawned!");
             Console.WriteLine();

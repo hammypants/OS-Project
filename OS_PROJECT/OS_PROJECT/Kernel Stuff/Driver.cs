@@ -66,43 +66,43 @@ namespace OS_PROJECT
             loader.Run();
             LTS.Run();
 
-            int cpu = 0;
+        //    int cpu = 0;
 
-            while (shouldRun)
-            {
-                if (ReadyQueue.AccessQueue.Count == 0)
-                {
-                    shouldRun = false;
-                }
-                if (cpuList[cpu].isActive == true)
-                {
-                    // Do nothing.
-                }
-                else
-                {
-                    // Tell the CPU to go again.
-                    cpuList[cpu].ResumeCPU();
-                }
-                cpu++;
-                cpu %= numberOfCPUs;
-            }
+        //    while (shouldRun)
+        //    {
+        //        if (ReadyQueue.AccessQueue.Count == 0)
+        //        {
+        //            shouldRun = false;
+        //        }
+        //        if (cpuList[cpu].isActive == true)
+        //        {
+        //            // Do nothing.
+        //        }
+        //        else
+        //        {
+        //            // Tell the CPU to go again.
+        //            cpuList[cpu].ResumeCPU();
+        //        }
+        //        cpu++;
+        //        cpu %= numberOfCPUs;
+        //    }
 
-            bool wait = true;
-            while (wait)
-            {
-                int finished = 0;
-                foreach (CPU c in cpuList)
-                {
-                    if (!c.isActive)
-                    {
-                        finished++;
-                    }
-                }
-                if (finished == numberOfCPUs)
-                {
-                    wait = false;
-                }
-            }
+        //    bool wait = true;
+        //    while (wait)
+        //    {
+        //        int finished = 0;
+        //        foreach (CPU c in cpuList)
+        //        {
+        //            if (!c.isActive)
+        //            {
+        //                finished++;
+        //            }
+        //        }
+        //        if (finished == numberOfCPUs)
+        //        {
+        //            wait = false;
+        //        }
+        //    }
         }
 
         void RunCPUs()
