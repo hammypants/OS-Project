@@ -24,6 +24,7 @@ namespace OS_PROJECT
         uint addressCounter = 0;
         uint currentJobStartAddress = 0;
         uint offset = 0;
+        List<uint> pages = new List<uint>();
 
         public Loader(Driver k)
         {
@@ -67,6 +68,10 @@ namespace OS_PROJECT
                         offset = 0;
                         for (int i = 1; i <= numWords; i++)
                         {
+                            if (!pages.Contains(addressCounter / 4))
+                            {
+                                pages.Add(addressCounter / 4);
+                            }
                             disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
                         }
                     }
@@ -76,6 +81,10 @@ namespace OS_PROJECT
                         offset = 1;
                         for (int i = 1; i <= numWords; i++)
                         {
+                            if (!pages.Contains(addressCounter / 4))
+                            {
+                                pages.Add(addressCounter / 4);
+                            }
                             disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
                         }
 
@@ -91,6 +100,10 @@ namespace OS_PROJECT
                         offset = 2;
                         for (int i = 1; i <= numWords; i++)
                         {
+                            if (!pages.Contains(addressCounter / 4))
+                            {
+                                pages.Add(addressCounter / 4);
+                            }
                             disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
                         }
 
@@ -106,6 +119,10 @@ namespace OS_PROJECT
                         offset = 3;
                         for (int i = 1; i <= numWords; i++)
                         {
+                            if (!pages.Contains(addressCounter / 4))
+                            {
+                                pages.Add(addressCounter / 4);
+                            }
                             disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
                         }
 
@@ -115,18 +132,22 @@ namespace OS_PROJECT
                         }
 
                     }
-
+                    file.ReadLine();
                 }
 
                 // if data do ...
-                if (string.Compare(jobDataEnd, data) == 0)
+                if (string.Compare(jobDataEnd, data) == 1)
                 {
                     numWords = 44; //one;
                     otptBuffSize = Convert.ToUInt32(words[3], 16);
                     tempBuffSize = Convert.ToUInt32(words[4], 16);
-
                     for (int i = 1; i <= numWords; i++)
                     {
+                        uint page = addressCounter / 4;
+                        if (!pages.Contains(page))
+                        {
+                            pages.Add(page);
+                        }
                         disk.WriteDataToDisk(addressCounter++, SystemCaller.ConvertInputDataToUInt(file.ReadLine()));
                     }
                     file.ReadLine();
@@ -135,7 +156,8 @@ namespace OS_PROJECT
                 if (string.Compare(jobDataEnd, end) == 1)
                 {
                     Console.WriteLine("Job: " + jobNum);
-                    SpawnProcess(jobNum, priorityNum, numWords, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress, offset);
+                    SpawnProcess(jobNum, priorityNum, numWords, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress, offset, pages);
+                    pages.Clear();
                 }
             }
             file.Close();
@@ -145,7 +167,7 @@ namespace OS_PROJECT
             priorityNum = 0;
         }
 
-        void SpawnProcess(uint pID, uint priority, uint numWords, uint outB, uint inB, uint tempB, uint startAddress, uint offset)
+        void SpawnProcess(uint pID, uint priority, uint numWords, uint outB, uint inB, uint tempB, uint startAddress, uint offset, List<uint> pages)
         {
             Process p = new Process(new PCB());
             p.PCB.ProcessID = pID;
@@ -156,6 +178,11 @@ namespace OS_PROJECT
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);
             p.PCB.DiskAddress = startAddress;
             p.PCB.SeparationOffset = offset;
+            foreach (uint page in pages)
+            {
+                p.PCB.PageTable.table[page].IsOwned = true;
+                Console.WriteLine("Process " + p.PCB.ProcessID + " owns page " + page + ".");
+            }
             Console.WriteLine("Disk Address: " + p.PCB.DiskAddress.ToString());
             Console.WriteLine("Input Buffer: " +p.PCB.InputBufferSize.ToString());
             Console.WriteLine("Instruction Length: " + p.PCB.InstructionLength.ToString());

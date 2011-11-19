@@ -7,7 +7,7 @@ namespace OS_PROJECT
 {
     class PageTable
     {
-        PageTableLocation[] table = new PageTableLocation[512];
+        public PageTableLocation[] table = new PageTableLocation[512];
 
         public PageTable()
         {
@@ -15,15 +15,15 @@ namespace OS_PROJECT
             {
                 table[iterator].Frame = 257;
                 table[iterator].InMemory = false;
-                table[iterator].OwnerID = 31;
+                table[iterator].IsOwned = false;
             }
         }
 
-        struct PageTableLocation
+        public struct PageTableLocation
         {
             public uint Frame;
             public bool InMemory;
-            public uint OwnerID;
+            public bool IsOwned;
         }
     }
 }

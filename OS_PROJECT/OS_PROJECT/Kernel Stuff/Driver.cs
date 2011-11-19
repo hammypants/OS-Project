@@ -64,7 +64,24 @@ namespace OS_PROJECT
 
             // Main program.
             loader.Run();
-            LTS.Run();
+            #region WTF
+            //List<Process> temp = new List<Process>();
+            //for (int i = 0; i < 30; i++)
+            //{
+            //    temp.Add(NewProcessQueue.AccessQueue.ElementAt<Process>(i));
+            //}
+            //foreach (Process p in temp)
+            //{
+            //    for (uint i = 0; i < 512; i++)
+            //    {
+            //        if (p.PCB.PageTable.table[i].IsOwned)
+            //        {
+            //            Console.WriteLine("Process " + p.PCB.ProcessID + " has page " + i + ".");
+            //        }
+            //    }
+            //}
+            #endregion // Don't delete this. WILL SAVE YOUR LIFE LATER.
+            //LTS.Run();
 
         //    int cpu = 0;
 

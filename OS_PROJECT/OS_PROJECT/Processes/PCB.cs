@@ -73,7 +73,7 @@ namespace OS_PROJECT
         { get { return MemoryAddress + InstructionLength; } }
 
         public uint JobLength
-        { get { return InstructionLength + InputBufferSize + OutputBufferSize + TempBufferSize; } }
+        { get { return InstructionLength + InputBufferSize + OutputBufferSize + TempBufferSize + SeparationOffset; } }
 
         uint programCounter = 0;
         public uint ProgramCounter
