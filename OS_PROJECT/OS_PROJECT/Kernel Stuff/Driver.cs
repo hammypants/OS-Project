@@ -81,7 +81,10 @@ namespace OS_PROJECT
             //    }
             //}
             #endregion // Don't delete this. WILL SAVE YOUR LIFE LATER.
-            //LTS.Run();
+
+            LTS.Run();
+
+            Console.ReadKey();
 
         //    int cpu = 0;
 

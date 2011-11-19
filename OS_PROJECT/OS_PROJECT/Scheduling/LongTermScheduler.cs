@@ -92,13 +92,25 @@ namespace OS_PROJECT
 
         void InsertBatchInMemory()
         {
-            uint addressCounter = 0;
+            //uint addressCounter = 0;
+            //foreach (Process p in batchList)
+            //{
+            //    p.PCB.MemoryAddress = addressCounter;
+            //    for (uint i = p.PCB.DiskAddress; i < p.PCB.DiskAddress+p.PCB.JobLength; i++)
+            //    {
+            //        RAM.WriteDataToMemory(addressCounter++, disk.ReadDataFromDisk(i));
+            //    }
+            //}
+
             foreach (Process p in batchList)
             {
-                p.PCB.MemoryAddress = addressCounter;
-                for (uint i = p.PCB.DiskAddress; i < p.PCB.DiskAddress+p.PCB.JobLength; i++)
+                uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(p.PCB.PageTable.table, e => e.IsOwned == true);
+                uint frame;
+                for (uint iterator = firstPage; iterator < firstPage + 4; iterator++)
                 {
-                    RAM.WriteDataToMemory(addressCounter++, disk.ReadDataFromDisk(i));
+                    frame = MMU.GetFreeFrame(iterator);
+                    p.PCB.PageTable.table[iterator].InMemory = true;
+                    p.PCB.PageTable.table[iterator].Frame = frame;
                 }
             }
         }

@@ -40,6 +40,38 @@ namespace OS_PROJECT
             singleton.kernel.RAM.WriteDataToMemory(address, data);
         }
 
+        public static uint GetFreeFrame(uint page)
+        {
+            uint firstFreeFrame = (uint)Array.FindIndex<FrameTableLocation>(FrameTable, e => e.Free == true);
+            WritePageToFrame(page, firstFreeFrame);
+            FrameTable[firstFreeFrame].Free = false;
+            return firstFreeFrame;
+        }
+
+        static bool IsFree(FrameTableLocation l)
+        {
+            if (l.Free)
+                return true;
+            else return false;
+        }
+
+        public static void WritePageToFrame(uint page, uint frame)
+        {
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                Write(frame * 4 + iterator, singleton.kernel.Disk.ReadDataFromDisk(page * 4 + iterator));
+            }
+        }
+
+        public static void GrabPageFromAddressToFrame(uint address, uint frame)
+        {
+            uint page = address / 4;
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                Write(frame * 4 + iterator, singleton.kernel.Disk.ReadDataFromDisk(page * 4 + iterator));
+            }
+        }
+
         struct FrameTableLocation
         {
             public uint Page;
