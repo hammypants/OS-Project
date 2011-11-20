@@ -24,6 +24,9 @@ namespace OS_PROJECT
 
         public uint sreg1, sreg2, dreg, reg1, reg2, breg, address;
 
+        public uint temp_data;
+        public uint temp_address;
+
         public ExecutionPhase CurrentExecutionPhase;
 
         public uint SeparationOffset;

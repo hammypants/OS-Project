@@ -45,8 +45,12 @@ namespace OS_PROJECT
             return returnableFrame;
         }
 
-        public static void WriteFrame(uint[] frame)
+        public static void WriteCacheFrameToFrame(uint[] cacheFrame, uint frame)
         {
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                singleton.kernel.RAM.WriteDataToMemory((frame * 4 + iterator), cacheFrame[iterator]);
+            }
         }
 
         public static void Write(uint address, uint data)

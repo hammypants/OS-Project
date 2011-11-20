@@ -20,6 +20,8 @@ namespace OS_PROJECT
 
     class CPU
     {
+        enum CacheType { Instruction, Input, Output, None } 
+
         public struct CacheLocation
         {
             public uint[] Data;
@@ -28,7 +30,7 @@ namespace OS_PROJECT
         }
         Process blockedProcess;
         bool faulted = false;
-        bool first_page_fault_completed = false;
+        bool first_fault_completed = false;
 
         Driver kernel;
         Disk disk;
@@ -131,9 +133,9 @@ namespace OS_PROJECT
                     faulted = false;
                     if (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch)
                     Fetch();
-                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch))
+                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Decode))
                     Decode();
-                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch))
+                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Execute))
                     Execute();
                 }
             }
@@ -203,74 +205,19 @@ namespace OS_PROJECT
                 if (cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].InMemory)
                 {
                     // in memory, load it into a cache?
+
+                    // copying cache to its frame before we replace the cache frame -- only works for instructions
+                    MMU.WriteCacheFrameToFrame(cache_instruction[cache_instruction_counter].Data, cache_instruction[cache_instruction_counter].Frame);
+
                     cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame);
                     cache_instruction_counter = cache_instruction_counter % 4;
                 }
                 else
                 { 
                     // not in memory, page fault bitches!
-                    PageFault();
+                    PageFault(((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4), CacheType.Instruction);
                 }
             }
-        }
-
-        void PageFault()
-        {
-            if (first_page_fault_completed == true)
-            {
-                Process blockedProcessToBeSwappedIn;
-                ServiceBlockedProcess_PageFault();
-                blockedProcessToBeSwappedIn = blockedProcess;
-                blockedProcess = currentProcess;
-                currentProcess = blockedProcessToBeSwappedIn;
-                faulted = true;
-            }
-            else
-            {
-                blockedProcess = currentProcess;
-                faulted = true;
-                first_page_fault_completed = true;
-            }
-        }
-
-        void ServiceBlockedProcess_PageFault()
-        {
-            uint frame;
-            frame = MMU.GetFreeFrame(((blockedProcess.PCB.DiskAddress + blockedProcess.PCB.ProgramCounter) / 4));
-            cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(frame);
-            cache_instruction_counter = cache_instruction_counter % 4;
-        }
-
-        void IOFault_Read(uint address)
-        {
-            currentProcess.PCB.sreg1 = cpuPCB.sreg1;
-            currentProcess.PCB.sreg2 = cpuPCB.sreg2;
-            currentProcess.PCB.dreg = cpuPCB.dreg;
-            currentProcess.PCB.reg1 = cpuPCB.reg1;
-            currentProcess.PCB.reg2 = cpuPCB.reg2;
-            currentProcess.PCB.breg = cpuPCB.breg;
-            currentProcess.PCB.address = cpuPCB.address;
-            faulted = true;
-        }
-
-        void IOFault_Write(uint address)
-        {
-            currentProcess.PCB.sreg1 = cpuPCB.sreg1;
-            currentProcess.PCB.sreg2 = cpuPCB.sreg2;
-            currentProcess.PCB.dreg = cpuPCB.dreg;
-            currentProcess.PCB.reg1 = cpuPCB.reg1;
-            currentProcess.PCB.reg2 = cpuPCB.reg2;
-            currentProcess.PCB.breg = cpuPCB.breg;
-            currentProcess.PCB.address = cpuPCB.address;
-            faulted = true;
-        }
-
-        void ServiceBlockedProcess_IOFault_Read(uint address)
-        {
-        }
-
-        void ServiceBlockedProcess_IOFault_Write(uint address)
-        {
         }
 
         void Decode()
@@ -415,14 +362,12 @@ namespace OS_PROJECT
                         reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        IOFault_Read(address);
                     }
                     else if (currentInstructionOp == Instruction.WR)
                     {
                         reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        IOFault_Write(address);
                     }
                     break;
                 case InstructionType.I:
@@ -445,36 +390,131 @@ namespace OS_PROJECT
             {
                 case Instruction.RD:
                     // Reads the content of IP buffer into a accumulator.
-                    //Console.Write("Reading ");
                     if (reg2 == 0)
                     {
-                        //Console.WriteLine("data ["+cache[address].ToString()+"] from address ["+address.ToString()+"] to Register " + reg1 + ".");
-                        cpuPCB.register[reg1].WriteToRegister(cache[address]);
+                        // check if cache or ram
+                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input) // should it be in this cache type?
+                        {
+                            if (CheckCacheForPage(address, CacheType.Input)) // should be in this cache, check to make sure it's in there
+                            {
+                                cpuPCB.register[reg1].WriteToRegister(cache_input[address].Data[GetCacheLocation(address, CacheType.Input)]);
+                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                            }
+                            else // not in its supposed cache
+                            {
+                                if (cpuPCB.PageTable.table[cpuPCB.DiskAddress + address].InMemory) // is in memory
+                                {
+                                    IOFault_Read(address, true);
+                                }
+                                else // not in memory
+                                {
+                                }
+                            }
+                        }
+                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
+                        {
+                            if (CheckCacheForPage(address, CacheType.Output))
+                            {
+                                cpuPCB.register[reg1].WriteToRegister(cache_output[address].Data[GetCacheLocation(address, CacheType.Output)]);
+                            }
+                            else // not in its supposed cache
+                            {
+                                PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Output);
+                            }
+                        }
+                        else // must be RAM
+                        {
+                            if (cpuPCB.PageTable.table[cpuPCB.DiskAddress + address].InMemory)
+                            {
+                                IOFault_Read(address, false);
+                            }
+                            else // not in memory
+                            {
+                                PageFault(cpuPCB.DiskAddress + address, CacheType.None);
+                            }
+                        }
                     }
                     else
                     {
-                        //Console.WriteLine("data [" + cpuPCB.register[reg2].ReadData() + "] from Register "+reg2+" to Register "+reg1+".");
-                        cpuPCB.register[reg1].WriteToRegister(cache[cpuPCB.register[reg2].ReadData()]);
+                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input)
+                        {
+                            if (CheckCacheForPage(address, CacheType.Input))
+                            {
+                                cpuPCB.register[reg1].WriteToRegister(cache_input[cpuPCB.register[reg2].ReadData()].Data[GetCacheLocation(address, CacheType.Input)]);
+                            }
+                            else // not in its supposed cache
+                            {
+                                PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Input);
+                            }
+                        }
+                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
+                        {
+                            if (CheckCacheForPage(address, CacheType.Output))
+                            {
+                                cpuPCB.register[reg1].WriteToRegister(cache_output[cpuPCB.register[reg2].ReadData()].Data[GetCacheLocation(address, CacheType.Output)]);
+                            }
+                            else // not in its supposed cache
+                            {
+                                PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Output);
+                            }
+                        }
+                        else // must be RAM
+                        {
+                            if (cpuPCB.PageTable.table[cpuPCB.DiskAddress + address].InMemory)
+                            {
+                                IOFault_Read(address, false);
+                            }
+                            else // not in memory
+                            {
+                                PageFault(cpuPCB.DiskAddress + address, CacheType.None);
+                            }
+                        }
+                        //cpuPCB.register[reg1].WriteToRegister(cache_output[cpuPCB.register[reg2].ReadData()].Data[GetCacheLocation(address, CacheType.Output)]);
+                        //cpuPCB.register[reg1].WriteToRegister(cache[cpuPCB.register[reg2].ReadData()]);
                     }
-                    //Console.WriteLine("Completed: Register "+reg1+" now contains " + cpuPCB.register[reg1].ReadData().ToString() +
-                        //" and Register "+reg2+" now contains " + cpuPCB.register[reg2].ReadData().ToString());
                     break;
                 case Instruction.WR:
                     // Writes the content of the accumulator into the OP buffer
-                    //Console.WriteLine("Writing ");
                     if (address == 0)
                     {
-                        //Console.WriteLine("Register 1 is Register " + reg1 + " and Register 2 is " + reg2 + ".");
-                        //Console.WriteLine("Register " + reg1 + " contains " + cpuPCB.register[reg1].ReadData());
-                        //Console.WriteLine("Register " + reg2 + " contains " + cpuPCB.register[reg2].ReadData());
-                        //Console.WriteLine("data [" + cpuPCB.register[reg1].ReadData() + "] from Register "+reg1+" to Register "+reg2+".");
-                        cache[cpuPCB.register[reg2].ReadData()] = cpuPCB.register[reg1].ReadData();
-                        //Console.WriteLine(cache[cpuPCB.register[reg2].ReadData()]);
+                        //cache[cpuPCB.register[reg2].ReadData()] = cpuPCB.register[reg1].ReadData();
+                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input)
+                        {
+                            cache_input[cpuPCB.register[reg2].ReadData()].Data[GetCacheLocation(address, CacheType.Input)] = cpuPCB.register[reg1].ReadData();
+                        }
+                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
+                        {
+                            cache_output[cpuPCB.register[reg2].ReadData()].Data[GetCacheLocation(address, CacheType.Output)] = cpuPCB.register[reg1].ReadData();
+                        }
+                        else
+                        {
+                            if (cpuPCB.PageTable.table[cpuPCB.DiskAddress + address].InMemory) // in memory
+                            {
+                                
+                            }
+                            else // not in memory
+                            {
+                            }
+                        }
                     }
                     else
                     {
-                        //Console.WriteLine("data [" + cpuPCB.register[reg1].ReadData() + "] from Register 1 to address [" + address + "].");
-                        cache[address] = cpuPCB.register[reg1].ReadData();
+                        //cache[address] = cpuPCB.register[reg1].ReadData();
+                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input)
+                        {
+                        }
+                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
+                        {
+                        }
+                        else
+                        {
+                            if (cpuPCB.PageTable.table[cpuPCB.DiskAddress + address].InMemory) // in memory
+                            {
+                            }
+                            else // not in memory
+                            {
+                            }
+                        }
                     }
                     //Console.WriteLine("Completed.");
                     break;
@@ -661,7 +701,6 @@ namespace OS_PROJECT
                     Console.WriteLine("OOPS!");
                     break;
             }
-            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
         }
 
         void SaveProcessStatus()
@@ -669,10 +708,10 @@ namespace OS_PROJECT
             // Save process's PCB as CPU's PCB.
             currentProcess.PCB = cpuPCB;
             // Save CPU cache into process's memory location.
-            for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
-            {
-                RAM.WriteDataToMemory((currentProcess.PCB.MemoryAddress + iterator), cache[iterator]);
-            }
+            //for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
+            //{
+            //    RAM.WriteDataToMemory((currentProcess.PCB.MemoryAddress + iterator), cache[iterator]);
+            //}
         }
 
         void ProcessFinished()
@@ -690,6 +729,242 @@ namespace OS_PROJECT
         {
             if (currentProcess == null) return false;
             return true;
+        }
+
+        uint GetCacheLocation(uint address, CacheType ctype) // ONLY CALL IF IN CACHE
+        {
+            if (ctype == CacheType.Input)
+            {
+                if (((cpuPCB.DiskAddress + address) / 4) == cache_input[0].Page)
+                {
+                    return 0;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[1].Page)
+                {
+                    return 1;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[2].Page)
+                {
+                    return 2;
+                }
+                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_input[3].Page)
+                {
+                    return 3;
+                }
+            }
+            else if (ctype == CacheType.Output)
+            {
+                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
+                {
+                    return 0;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
+                {
+                    return 1;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
+                {
+                    return 2;
+                }
+                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
+                {
+                    return 3;
+                }
+            }
+            else //if (ctype == CacheType.Output)
+            {
+                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
+                {
+                    return 0;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
+                {
+                    return 1;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
+                {
+                    return 2;
+                }
+                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
+                {
+                    return 3;
+                }
+            } 
+        }
+
+        bool CheckCacheForPage(uint address, CacheType ctype)
+        {
+            if (ctype == CacheType.Input)
+            {
+                if (((cpuPCB.DiskAddress + address) / 4) == cache_input[0].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[1].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[2].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[3].Page)
+                {
+                    return true;
+                }
+                else return false;
+            }
+            else if (ctype == CacheType.Output)
+            {
+                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
+                {
+                    return true;
+                }
+                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
+                {
+                    return true;
+                }
+                else return false;
+            }
+            else return false; // SHOULD NEVER GET HERE.
+        }
+
+        CacheType ReturnCacheTypeFromAddress(uint address)
+        {
+            if (((cpuPCB.DiskAddress + address) < cpuPCB.DataBeginningDiskAddress))
+            {
+                return CacheType.Instruction;
+            }
+            else if (((cpuPCB.DiskAddress + address) >= cpuPCB.DataBeginningDiskAddress) && ((cpuPCB.DiskAddress + address) < cpuPCB.DataBeginningDiskAddress + cpuPCB.InputBufferSize))
+            {
+                return CacheType.Input;
+            }
+            else if (((cpuPCB.DiskAddress + address) >= cpuPCB.DataBeginningDiskAddress + cpuPCB.InputBufferSize) && ((cpuPCB.DiskAddress + address) < cpuPCB.DiskAddress + cpuPCB.JobLength))
+            {
+                return CacheType.Output;
+            }
+            else
+            {
+                return CacheType.None;
+            }
+        }
+
+        void PageFault(uint neededPage, CacheType cacheType)
+        {
+            SaveProcessStatus();
+            if (first_fault_completed == true)
+            {
+                Process blockedProcessToBeSwappedIn;
+                ServiceBlockedProcess_PageFault(neededPage, cacheType);
+                blockedProcessToBeSwappedIn = blockedProcess;
+                blockedProcess = currentProcess;
+                currentProcess = blockedProcessToBeSwappedIn;
+                faulted = true;
+            }
+            else
+            {
+                blockedProcess = currentProcess;
+                faulted = true;
+                first_fault_completed = true;
+            }
+        }
+
+        void ServiceBlockedProcess_PageFault(uint neededPage, CacheType cacheType)
+        {
+            uint frame;
+            if (cacheType == CacheType.Instruction)
+            {
+                frame = MMU.GetFreeFrame(neededPage);
+                cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(frame);
+                cache_instruction_counter = cache_instruction_counter % 4;
+            }
+            else if (cacheType == CacheType.Input)
+            {
+                frame = MMU.GetFreeFrame(neededPage);
+                cache_input[cache_input_counter++].Data = MMU.ReadFrame(frame);
+                cache_input_counter = cache_input_counter % 4;
+            }
+            else if (cacheType == CacheType.Output)
+            {
+                frame = MMU.GetFreeFrame(neededPage);
+                cache_output[cache_output_counter++].Data = MMU.ReadFrame(frame);
+                cache_output_counter = cache_output_counter % 4;
+            }
+            else if (cacheType == CacheType.None)
+            {
+                frame = MMU.GetFreeFrame(neededPage);
+            }
+        }
+
+        void IOFault_Read(uint address, bool fromCache)
+        {
+            cpuPCB.temp_address = address;
+            SaveProcessStatus();
+            if (first_fault_completed == true)
+            {
+                Process blockedProcessToBeSwappedIn;
+                blockedProcess.PCB.temp_address = ServiceBlockedProcess_IOFault_Read(blockedProcess.PCB.temp_address);
+                blockedProcessToBeSwappedIn = blockedProcess;
+                blockedProcess = currentProcess;
+                currentProcess = blockedProcessToBeSwappedIn;
+                faulted = true;
+            }
+            else
+            {
+                blockedProcess = currentProcess;
+                faulted = true;
+                first_fault_completed = true;
+            }
+            faulted = true;
+        }
+
+        void IOFault_Write(uint data, uint address, bool fromCache)
+        {
+            cpuPCB.temp_data = data;
+            cpuPCB.temp_address = address;
+            SaveProcessStatus();
+            if (first_fault_completed == true)
+            {
+                Process blockedProcessToBeSwappedIn;
+                ServiceBlockedProcess_IOFault_Write(blockedProcess.PCB.temp_data, cpuPCB.temp_address);
+                blockedProcessToBeSwappedIn = blockedProcess;
+                blockedProcess = currentProcess;
+                currentProcess = blockedProcessToBeSwappedIn;
+                faulted = true;
+            }
+            else
+            {
+                blockedProcess = currentProcess;
+                faulted = true;
+                first_fault_completed = true;
+            }
+            faulted = true;
+        }
+
+        uint ServiceBlockedProcess_IOFault_Read(uint address)
+        {
+            return MMU.Read(address);
+        }
+
+        void ServiceBlockedProcess_IOFault_Write(uint data, uint address)
+        {
+            MMU.Write(address, data);
+        }
+
+        void ServiceBlockedProcess_FromCache_IOFault_Read(uint address)
+        {
+        }
+
+        void ServiceBlockedProcess_FromCache_IOFault_Write(uint data, uint address)
+        {
         }
     }
 }
