@@ -24,7 +24,11 @@ namespace OS_PROJECT
         {
             public uint[] Data;
             public uint Frame;
+            public uint Page;
         }
+        Process blockedProcess;
+        bool faulted = false;
+        bool first_page_fault_completed = false;
 
         Driver kernel;
         Disk disk;
@@ -49,10 +53,14 @@ namespace OS_PROJECT
 
         volatile Object dispatcherLock = new Object();
         volatile Object cacheLock = new Object();
+        volatile Object rwLock = new Object();
 
         CacheLocation[] cache_instruction = new CacheLocation[4];
+        uint cache_instruction_counter = 0;
         CacheLocation[] cache_input = new CacheLocation[4];
+        uint cache_input_counter = 0;
         CacheLocation[] cache_output = new CacheLocation[4];
+        uint cache_output_counter = 0;
         uint[] cache = new uint[1];
 
         string currentInstruction;
@@ -71,8 +79,11 @@ namespace OS_PROJECT
             for (uint iterator = 0; iterator < 4; iterator++)
             {
                 cache_instruction[iterator].Data = new uint[4];
+                cache_instruction[iterator].Frame = 257;
                 cache_input[iterator].Data = new uint[4];
+                cache_input[iterator].Frame = 257;
                 cache_output[iterator].Data = new uint[4];
+                cache_output[iterator].Frame = 257;
             }
             this.id = id;
             thread = new Thread(new ThreadStart(this.Run));
@@ -117,8 +128,12 @@ namespace OS_PROJECT
                 }
                 while (HasProcess())
                 {
+                    faulted = false;
+                    if (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch)
                     Fetch();
+                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch))
                     Decode();
+                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch))
                     Execute();
                 }
             }
@@ -136,6 +151,7 @@ namespace OS_PROJECT
                     Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " (Priority: " + currentProcess.PCB.Priority + " | Instr. Length: " + currentProcess.PCB.InstructionLength +
                         ") spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
                     processCounter++;
+                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                     FillCache();
                     totalElapsedTime.Start();
                 }
@@ -150,14 +166,111 @@ namespace OS_PROJECT
                 {
                     cache_instruction[iterator].Data = MMU.ReadFrame(cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame);
                     cache_instruction[iterator].Frame = cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame;
+                    cache_instruction[iterator].Page = cpuPCB.DiskAddress / 4 + iterator;
                 }
             }
         }
 
         void Fetch()
         {
-            currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[cpuPCB.ProgramCounter / 4].Data[cpuPCB.ProgramCounter % 4]);
-            cpuPCB.ProgramCounter++;
+            if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[0].Page)
+            {
+                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[0].Data[cpuPCB.ProgramCounter % 4]);
+                cpuPCB.ProgramCounter++;
+                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
+            }
+            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[1].Page)
+            {
+                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[1].Data[cpuPCB.ProgramCounter % 4]);
+                cpuPCB.ProgramCounter++;
+                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
+            }
+            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[2].Page)
+            {
+                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[2].Data[cpuPCB.ProgramCounter % 4]);
+                cpuPCB.ProgramCounter++;
+                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
+            }
+            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[3].Page)
+            {
+                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[3].Data[cpuPCB.ProgramCounter % 4]);
+                cpuPCB.ProgramCounter++;
+                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
+            }
+            else
+            {
+                // not in cache, so check to see if it's in memory before we bring it in
+                if (cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].InMemory)
+                {
+                    // in memory, load it into a cache?
+                    cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame);
+                    cache_instruction_counter = cache_instruction_counter % 4;
+                }
+                else
+                { 
+                    // not in memory, page fault bitches!
+                    PageFault();
+                }
+            }
+        }
+
+        void PageFault()
+        {
+            if (first_page_fault_completed == true)
+            {
+                Process blockedProcessToBeSwappedIn;
+                ServiceBlockedProcess_PageFault();
+                blockedProcessToBeSwappedIn = blockedProcess;
+                blockedProcess = currentProcess;
+                currentProcess = blockedProcessToBeSwappedIn;
+                faulted = true;
+            }
+            else
+            {
+                blockedProcess = currentProcess;
+                faulted = true;
+                first_page_fault_completed = true;
+            }
+        }
+
+        void ServiceBlockedProcess_PageFault()
+        {
+            uint frame;
+            frame = MMU.GetFreeFrame(((blockedProcess.PCB.DiskAddress + blockedProcess.PCB.ProgramCounter) / 4));
+            cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(frame);
+            cache_instruction_counter = cache_instruction_counter % 4;
+        }
+
+        void IOFault_Read(uint address)
+        {
+            currentProcess.PCB.sreg1 = cpuPCB.sreg1;
+            currentProcess.PCB.sreg2 = cpuPCB.sreg2;
+            currentProcess.PCB.dreg = cpuPCB.dreg;
+            currentProcess.PCB.reg1 = cpuPCB.reg1;
+            currentProcess.PCB.reg2 = cpuPCB.reg2;
+            currentProcess.PCB.breg = cpuPCB.breg;
+            currentProcess.PCB.address = cpuPCB.address;
+            faulted = true;
+        }
+
+        void IOFault_Write(uint address)
+        {
+            currentProcess.PCB.sreg1 = cpuPCB.sreg1;
+            currentProcess.PCB.sreg2 = cpuPCB.sreg2;
+            currentProcess.PCB.dreg = cpuPCB.dreg;
+            currentProcess.PCB.reg1 = cpuPCB.reg1;
+            currentProcess.PCB.reg2 = cpuPCB.reg2;
+            currentProcess.PCB.breg = cpuPCB.breg;
+            currentProcess.PCB.address = cpuPCB.address;
+            faulted = true;
+        }
+
+        void ServiceBlockedProcess_IOFault_Read(uint address)
+        {
+        }
+
+        void ServiceBlockedProcess_IOFault_Write(uint address)
+        {
         }
 
         void Decode()
@@ -173,6 +286,7 @@ namespace OS_PROJECT
 
             switch (firstTwoHexChars)
             {
+                #region Switches
                 case "C0"://RD
                     currentInstructionOpType = InstructionType.IO;
                     currentInstructionOp = Instruction.RD;
@@ -284,6 +398,7 @@ namespace OS_PROJECT
                 default:
                     Console.WriteLine("oops!");
                     break;
+                #endregion
             }
 
             switch (currentInstructionOpType)
@@ -300,14 +415,14 @@ namespace OS_PROJECT
                         reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        
+                        IOFault_Read(address);
                     }
                     else if (currentInstructionOp == Instruction.WR)
                     {
                         reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        
+                        IOFault_Write(address);
                     }
                     break;
                 case InstructionType.I:
@@ -321,7 +436,7 @@ namespace OS_PROJECT
                 case InstructionType.NOP:
                     break;
             }
-
+            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Execute;
         }
 
         void Execute()
@@ -546,6 +661,7 @@ namespace OS_PROJECT
                     Console.WriteLine("OOPS!");
                     break;
             }
+            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
         }
 
         void SaveProcessStatus()

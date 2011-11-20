@@ -11,11 +11,20 @@ namespace OS_PROJECT
         New, Waiting, Ready, Running, Blocked, Terminated
     }
 
+    enum ExecutionPhase
+    {
+        Fetch, Decode, Execute
+    }
+
     class PCB
     {
         public Register[] register = new Register[16];
 
         public PageTable PageTable = new PageTable();
+
+        public uint sreg1, sreg2, dreg, reg1, reg2, breg, address;
+
+        public ExecutionPhase CurrentExecutionPhase;
 
         public uint SeparationOffset;
 

@@ -9,6 +9,8 @@ namespace OS_PROJECT
     {
         protected uint[][] RAM_Memory = new uint[256][];
 
+        volatile Object rqLock = new Object();
+
         public RAM()
         {
             for (uint f = 0; f < RAM_Memory.GetLength(0); f++)
@@ -19,16 +21,24 @@ namespace OS_PROJECT
 
         public void WriteDataToMemory(uint physicalAddress, uint data)
         {
-            try { RAM_Memory[GetFrame(physicalAddress)][GetOffset(physicalAddress)] = data; }
-            catch { Console.WriteLine("Could not write to specified memory location. Please check for out of bounds errors."); }
+            lock (rqLock)
+            {
+                try { RAM_Memory[GetFrame(physicalAddress)][GetOffset(physicalAddress)] = data; }
+                catch { Console.WriteLine("Could not write to specified memory location. Please check for out of bounds errors."); }
+            }
         }
 
         public uint ReadDataFromMemory(uint physicalAddress)
         {
-            try { return RAM_Memory[GetFrame(physicalAddress)][GetOffset(physicalAddress)]; }
-            catch
-            { Console.WriteLine("Could not read data from memory. Please check for out of bounds errors.");
-                return 0; }
+            lock (rqLock)
+            {
+                try { return RAM_Memory[GetFrame(physicalAddress)][GetOffset(physicalAddress)]; }
+                catch
+                {
+                    Console.WriteLine("Could not read data from memory. Please check for out of bounds errors.");
+                    return 0;
+                }
+            }
         }
 
         uint GetFrame(uint physicalAddress)

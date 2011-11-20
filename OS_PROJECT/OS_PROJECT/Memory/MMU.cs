@@ -83,6 +83,7 @@ namespace OS_PROJECT
             for (uint iterator = 0; iterator < 4; iterator++)
             {
                 Write(frame * 4 + iterator, singleton.kernel.Disk.ReadDataFromDisk(page * 4 + iterator));
+
             }
         }
 
