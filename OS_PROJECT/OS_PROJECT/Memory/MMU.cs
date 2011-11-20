@@ -35,6 +35,20 @@ namespace OS_PROJECT
             return data;
         }
 
+        public static uint[] ReadFrame(uint frame)
+        {
+            uint[] returnableFrame = new uint[4];
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                returnableFrame[iterator] = singleton.kernel.RAM.ReadDataFromMemory(frame * 4 + iterator);
+            }
+            return returnableFrame;
+        }
+
+        public static void WriteFrame(uint[] frame)
+        {
+        }
+
         public static void Write(uint address, uint data)
         {
             singleton.kernel.RAM.WriteDataToMemory(address, data);
@@ -46,6 +60,15 @@ namespace OS_PROJECT
             WritePageToFrame(page, firstFreeFrame);
             FrameTable[firstFreeFrame].Free = false;
             return firstFreeFrame;
+        }
+
+        public static void FreeFrame(uint frame)
+        {
+            FrameTable[frame].Free = true;
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                singleton.kernel.RAM.WriteDataToMemory(frame * 4 + iterator, 0);
+            }
         }
 
         static bool IsFree(FrameTableLocation l)

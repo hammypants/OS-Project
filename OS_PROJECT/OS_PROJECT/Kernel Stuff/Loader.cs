@@ -23,6 +23,7 @@ namespace OS_PROJECT
         uint inputBuffSize = 14;
         uint addressCounter = 0;
         uint currentJobStartAddress = 0;
+        uint instructionLength = 0;
         uint offset = 0;
         List<uint> pages = new List<uint>();
 
@@ -60,6 +61,7 @@ namespace OS_PROJECT
                 {
                     jobNum = Convert.ToUInt32(words[2], 16);
                     numWords = Convert.ToUInt32(words[3], 16);
+                    instructionLength = numWords;
                     priorityNum = Convert.ToUInt32(words[4], 16);
                     currentJobStartAddress = addressCounter;
 
@@ -156,7 +158,7 @@ namespace OS_PROJECT
                 if (string.Compare(jobDataEnd, end) == 1)
                 {
                     Console.WriteLine("Job: " + jobNum);
-                    SpawnProcess(jobNum, priorityNum, numWords, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress, offset, pages);
+                    SpawnProcess(jobNum, priorityNum, instructionLength, otptBuffSize, inputBuffSize, tempBuffSize, currentJobStartAddress, offset, pages);
                     pages.Clear();
                 }
             }
@@ -167,12 +169,12 @@ namespace OS_PROJECT
             priorityNum = 0;
         }
 
-        void SpawnProcess(uint pID, uint priority, uint numWords, uint outB, uint inB, uint tempB, uint startAddress, uint offset, List<uint> pages)
+        void SpawnProcess(uint pID, uint priority, uint instrL, uint outB, uint inB, uint tempB, uint startAddress, uint offset, List<uint> pages)
         {
             Process p = new Process(new PCB());
             p.PCB.ProcessID = pID;
             p.PCB.Priority = priorityNum;
-            p.PCB.InstructionLength = numWords;
+            p.PCB.InstructionLength = instrL;
             p.PCB.OutputBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);

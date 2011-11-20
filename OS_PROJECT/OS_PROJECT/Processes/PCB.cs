@@ -66,11 +66,11 @@ namespace OS_PROJECT
         public uint InputBufferSize
         { get { return inputBufferSize; } set { inputBufferSize = value; } }
 
-        public uint DataBeginningVirtualAddress
-        { get { return DiskAddress + InstructionLength; } }
+        public uint DataBeginningDiskAddress
+        { get { return DiskAddress + InstructionLength + SeparationOffset; } }
 
-        public uint DataBeginningPhysicalAddress
-        { get { return MemoryAddress + InstructionLength; } }
+        public uint DataBeginningMemoryAddress
+        { get { return MemoryAddress + InstructionLength + SeparationOffset; } }
 
         public uint JobLength
         { get { return InstructionLength + InputBufferSize + OutputBufferSize + TempBufferSize + SeparationOffset; } }
@@ -84,7 +84,6 @@ namespace OS_PROJECT
         { get { return diskStartAddress; } set { diskStartAddress = value; } }
 
         uint physicalAddress;
-
         public uint MemoryAddress
         { get { return physicalAddress; } set { physicalAddress = value; } }
 

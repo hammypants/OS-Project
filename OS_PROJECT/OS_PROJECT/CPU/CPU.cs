@@ -20,6 +20,12 @@ namespace OS_PROJECT
 
     class CPU
     {
+        public struct CacheLocation
+        {
+            public uint[] Data;
+            public uint Frame;
+        }
+
         Driver kernel;
         Disk disk;
         RAM RAM;
@@ -44,6 +50,9 @@ namespace OS_PROJECT
         volatile Object dispatcherLock = new Object();
         volatile Object cacheLock = new Object();
 
+        CacheLocation[] cache_instruction = new CacheLocation[4];
+        CacheLocation[] cache_input = new CacheLocation[4];
+        CacheLocation[] cache_output = new CacheLocation[4];
         uint[] cache = new uint[1];
 
         string currentInstruction;
@@ -59,7 +68,12 @@ namespace OS_PROJECT
             RAM = k.RAM;
             RQ = k.ReadyQueue;
             cpuPCB = new PCB();
-            cache = new uint[1];
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                cache_instruction[iterator].Data = new uint[4];
+                cache_input[iterator].Data = new uint[4];
+                cache_output[iterator].Data = new uint[4];
+            }
             this.id = id;
             thread = new Thread(new ThreadStart(this.Run));
             _suspendEvent = new ManualResetEventSlim(false);
@@ -130,19 +144,20 @@ namespace OS_PROJECT
 
         void FillCache()
         {
-            cache = new uint[currentProcess.PCB.JobLength];
             lock (cacheLock)
             {
-                for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
+                for (uint iterator = 0; iterator < 4; iterator++)
                 {
-                    cache[iterator] = RAM.ReadDataFromMemory(currentProcess.PCB.MemoryAddress + iterator);
+                    cache_instruction[iterator].Data = MMU.ReadFrame(cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame);
+                    cache_instruction[iterator].Frame = cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame;
                 }
             }
         }
 
         void Fetch()
         {
-            currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache[cpuPCB.ProgramCounter++]);
+            currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[cpuPCB.ProgramCounter / 4].Data[cpuPCB.ProgramCounter % 4]);
+            cpuPCB.ProgramCounter++;
         }
 
         void Decode()
