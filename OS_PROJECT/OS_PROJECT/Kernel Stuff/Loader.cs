@@ -179,6 +179,11 @@ namespace OS_PROJECT
             p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);
             p.PCB.DiskAddress = startAddress;
+            if (offset == 4 || offset == 0)
+            {
+                offset = 0;
+            }
+            else offset = 4 - offset;
             p.PCB.SeparationOffset = offset;
             foreach (uint page in pages)
             {

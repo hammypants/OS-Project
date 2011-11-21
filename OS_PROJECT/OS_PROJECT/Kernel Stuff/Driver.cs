@@ -87,6 +87,7 @@ namespace OS_PROJECT
             //}
             #endregion // Don't delete this. WILL SAVE YOUR LIFE LATER.
 
+            
             Console.ReadKey();
 
             int cpu = 0;

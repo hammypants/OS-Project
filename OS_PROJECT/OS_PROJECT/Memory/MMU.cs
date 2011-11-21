@@ -63,6 +63,8 @@ namespace OS_PROJECT
             uint firstFreeFrame = (uint)Array.FindIndex<FrameTableLocation>(FrameTable, e => e.Free == true);
             WritePageToFrame(page, firstFreeFrame);
             FrameTable[firstFreeFrame].Free = false;
+            FrameTable[firstFreeFrame].Page = page;
+            FreeFrames--;
             return firstFreeFrame;
         }
 
@@ -73,6 +75,7 @@ namespace OS_PROJECT
             {
                 singleton.kernel.RAM.WriteDataToMemory(frame * 4 + iterator, 0);
             }
+            FreeFrames++;
         }
 
         static bool IsFree(FrameTableLocation l)
@@ -88,6 +91,14 @@ namespace OS_PROJECT
             {
                 Write(frame * 4 + iterator, singleton.kernel.Disk.ReadDataFromDisk(page * 4 + iterator));
 
+            }
+        }
+
+        public static void WriteFrameToPage(uint frame, uint page)
+        {
+            for (uint iterator = 0; iterator < 4; iterator++)
+            {
+                singleton.kernel.Disk.WriteDataToDisk(page * 4 + iterator, singleton.kernel.RAM.ReadDataFromMemory(frame * 4 + iterator));
             }
         }
 
