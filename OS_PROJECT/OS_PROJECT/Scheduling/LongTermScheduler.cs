@@ -32,14 +32,15 @@ namespace OS_PROJECT
         {
             GetBatch();
             Console.WriteLine("BATCH COUNT: " + batchList.Count);
-            SortBatch("SJF");
+            SortBatch("FCFS");
             InsertBatchInMemory();
             ClearBatch();
         }
 
         void GetBatch()
         {
-            for (int i = 0; i < 30; i++)
+            int _bl = NPQ.AccessQueue.Count;
+            for (int i = 0; i < _bl; i++)
             {
                 Process p = NPQ.AccessQueue.Dequeue();
                 batchList.Add(p);
@@ -61,6 +62,13 @@ namespace OS_PROJECT
                     break;
                 case("SJF"):
                     batchList.Sort(CompareJob);
+                    foreach (Process p in batchList)
+                    {
+                        RQ.AccessQueue.Enqueue(p);
+                        p.PCB._waitingTime.Start();
+                    }
+                    break;
+                case ("FCFS"):
                     foreach (Process p in batchList)
                     {
                         RQ.AccessQueue.Enqueue(p);

@@ -24,6 +24,13 @@ namespace OS_PROJECT
 
         public uint sreg1, sreg2, dreg, reg1, reg2, breg, address;
 
+        public CacheLocation[] cache_instruction = new CacheLocation[4];
+        public uint cache_instruction_counter = 0;
+        public CacheLocation[] cache_input = new CacheLocation[4];
+        public uint cache_input_counter = 0;
+        public CacheLocation[] cache_output = new CacheLocation[4];
+        public uint cache_output_counter = 0;
+
         public uint temp_data;
         public uint temp_address;
 

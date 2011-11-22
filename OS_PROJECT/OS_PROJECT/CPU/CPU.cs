@@ -18,21 +18,21 @@ namespace OS_PROJECT
         IO, I, R, J, NOP
     }
 
+    public struct CacheLocation
+    {
+        public uint[] Data;
+        public uint Frame;
+        public uint Page;
+    }
+
     class CPU
     {
         enum CacheType { Instruction, Input, Output, None } 
 
-        public struct CacheLocation
-        {
-            public uint[] Data;
-            public uint Frame;
-            public uint Page;
-        }
         Process blockedProcess;
         bool faulted = false;
         bool first_fault_completed = false;
         bool io_wait = true;
-
 
         Driver kernel;
         Disk disk;
@@ -65,7 +65,6 @@ namespace OS_PROJECT
         uint cache_input_counter = 0;
         CacheLocation[] cache_output = new CacheLocation[4];
         uint cache_output_counter = 0;
-        uint[] cache = new uint[1];
 
         string currentInstruction;
         Instruction currentInstructionOp;
@@ -171,6 +170,12 @@ namespace OS_PROJECT
                     cache_instruction[iterator].Data = MMU.ReadFrame(cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame);
                     cache_instruction[iterator].Frame = cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame;
                     cache_instruction[iterator].Page = cpuPCB.DiskAddress / 4 + iterator;
+                    cache_input[iterator].Data = new uint[4];
+                    cache_input[iterator].Frame = 257;
+                    cache_input[iterator].Page = 513;
+                    cache_output[iterator].Data = new uint[4];
+                    cache_output[iterator].Frame = 257;
+                    cache_output[iterator].Page = 513;
                 }
             }
         }
@@ -457,6 +462,7 @@ namespace OS_PROJECT
                             if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Input))
                             {
                                 cpuPCB.register[reg1].WriteToRegister(cache_input[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input), cpuPCB.register[reg2].ReadData())]);
+                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                             }
                             else // not in its supposed cache
                             {
@@ -475,6 +481,7 @@ namespace OS_PROJECT
                             if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Output))
                             {
                                 cpuPCB.register[reg1].WriteToRegister(cache_input[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output), cpuPCB.register[reg2].ReadData())]);
+                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                             }
                             else // not in its supposed cache
                             {
@@ -954,7 +961,51 @@ namespace OS_PROJECT
         void SaveProcessStatus()
         {
             // Save process's PCB as CPU's PCB.
+            cpuPCB.cache_instruction = cache_instruction;
+            cpuPCB.cache_input = cache_input;
+            cpuPCB.cache_output = cache_output;
+            cpuPCB.cache_output_counter = cache_output_counter;
+            cpuPCB.cache_instruction_counter = cache_instruction_counter;
+            cpuPCB.cache_input_counter = cache_input_counter;
+            cpuPCB.address = address;
+            cpuPCB.breg = breg;
+            cpuPCB.dreg = dreg;
+            cpuPCB.reg1 = reg1;
+            cpuPCB.reg2 = reg2;
+            cpuPCB.sreg1 = sreg1;
+            cpuPCB.sreg2 = sreg2;
             currentProcess.PCB = cpuPCB;
+        }
+
+        void SetCPURegsAndCacheToProcessPCB(Process p)
+        {
+            cpuPCB.cache_instruction = p.PCB.cache_instruction;
+            cpuPCB.cache_input = p.PCB.cache_input;
+            cpuPCB.cache_output = p.PCB.cache_output;
+            cpuPCB.cache_output_counter = p.PCB.cache_output_counter;
+            cpuPCB.cache_instruction_counter = p.PCB.cache_instruction_counter;
+            cpuPCB.cache_input_counter = p.PCB.cache_input_counter;
+            cpuPCB.address = p.PCB.address;
+            cpuPCB.breg = p.PCB.breg;
+            cpuPCB.dreg = p.PCB.dreg;
+            cpuPCB.reg1 = p.PCB.reg1;
+            cpuPCB.reg2 = p.PCB.reg2;
+            cpuPCB.sreg1 = p.PCB.sreg1;
+            cpuPCB.sreg2 = p.PCB.sreg2;
+
+            cache_instruction = cpuPCB.cache_instruction;
+            cache_input = cpuPCB.cache_input;
+            cache_output = cpuPCB.cache_output;
+            cache_output_counter = cpuPCB.cache_output_counter;
+            cache_instruction_counter = cpuPCB.cache_instruction_counter;
+            cache_input_counter = cpuPCB.cache_input_counter;
+            address = cpuPCB.address;
+            breg = cpuPCB.breg;
+            dreg = cpuPCB.dreg;
+            reg1 = cpuPCB.reg1;
+            reg2 = cpuPCB.reg2;
+            sreg1 = cpuPCB.sreg1;
+            sreg2 = cpuPCB.sreg2;
         }
 
         void ProcessFinished()
@@ -967,7 +1018,12 @@ namespace OS_PROJECT
             kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
             Console.WriteLine("Elapsed time for CPU " + id + " to run job " + cpuPCB.ProcessID + " was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + "ms.\n");
-            currentProcess = null;
+            if (blockedProcess != null)
+            {
+                currentProcess = blockedProcess;
+                blockedProcess = null;
+            }
+            else currentProcess = null;
         }
 
         public bool HasProcess()
@@ -1120,6 +1176,7 @@ namespace OS_PROJECT
                 currentProcess = oldBlocked;
                 blockedProcess = oldCurrent;
                 cpuPCB = currentProcess.PCB;
+                SetCPURegsAndCacheToProcessPCB(currentProcess);
                 faulted = true;
             }
             else
@@ -1191,10 +1248,14 @@ namespace OS_PROJECT
                     ServiceBlockedProcess_IOFault_Read(CacheType.Output, (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].Frame));
                 }
                 cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                blockedProcessToBeSwappedIn = blockedProcess;
-                blockedProcess = currentProcess;
-                currentProcess = blockedProcessToBeSwappedIn;
-                cpuPCB = currentProcess.PCB;
+                if (blockedProcess != null)
+                {
+                    blockedProcessToBeSwappedIn = blockedProcess;
+                    blockedProcess = currentProcess;
+                    currentProcess = blockedProcessToBeSwappedIn;
+                    cpuPCB = currentProcess.PCB;
+                    SetCPURegsAndCacheToProcessPCB(currentProcess);
+                }
                 faulted = true;
             }
             else
@@ -1214,13 +1275,17 @@ namespace OS_PROJECT
             SaveProcessStatus();
             if (first_fault_completed == true)
             {
-                Process blockedProcessToBeSwappedIn;
-                ServiceBlockedProcess_IOFault_Write(blockedProcess.PCB.temp_data, cpuPCB.temp_address);
-                currentProcess.PCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                blockedProcessToBeSwappedIn = blockedProcess;
-                blockedProcess = currentProcess;
-                currentProcess = blockedProcessToBeSwappedIn;
-                cpuPCB = currentProcess.PCB;
+                if (blockedProcess != null)
+                {
+                    Process blockedProcessToBeSwappedIn;
+                    ServiceBlockedProcess_IOFault_Write(blockedProcess.PCB.temp_data, cpuPCB.temp_address);
+                    currentProcess.PCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    blockedProcessToBeSwappedIn = blockedProcess;
+                    blockedProcess = currentProcess;
+                    currentProcess = blockedProcessToBeSwappedIn;
+                    cpuPCB = currentProcess.PCB;
+                    SetCPURegsAndCacheToProcessPCB(currentProcess);
+                }
                 faulted = true;
             }
             else
