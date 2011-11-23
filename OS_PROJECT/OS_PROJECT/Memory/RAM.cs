@@ -43,8 +43,8 @@ namespace OS_PROJECT
 
         uint GetFrame(uint physicalAddress)
         {
-            uint page = physicalAddress / 4;
-            return page;
+            uint frame = physicalAddress / 4;
+            return frame;
         }
 
         uint GetOffset(uint physicalAddress)

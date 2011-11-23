@@ -26,8 +26,11 @@ namespace OS_PROJECT
         public uint ReadDataFromDisk(uint physicalAddress)
         {
             try { return diskMemory[GetPage(physicalAddress)][GetOffset(physicalAddress)]; }
-            catch { Console.WriteLine("Could not read data from disk. Please check for out of bounds errors.");
-                return 0; }
+            catch
+            {
+                Console.WriteLine("Could not read data from disk. Please check for out of bounds errors.");
+                return 0;
+            }
         }
 
         uint GetPage(uint physicalAddress)

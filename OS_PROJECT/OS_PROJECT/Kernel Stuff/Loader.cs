@@ -44,8 +44,8 @@ namespace OS_PROJECT
             string data = "Data";
 
             //Read the file
-            StreamReader file = new StreamReader(//@"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\DataFile2.txt");
-                @"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\DataFile1.txt");
+            StreamReader file = new StreamReader(@"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\DataFile2.txt");
+                //@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\DataFile1.txt");
 
             while ((line = file.ReadLine()) != null)
             {
@@ -175,8 +175,8 @@ namespace OS_PROJECT
             p.PCB.ProcessID = pID;
             p.PCB.Priority = priorityNum;
             p.PCB.InstructionLength = instrL;
-            p.PCB.OutputBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
-            p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber); 
+            p.PCB.OutputBufferSize = UInt32.Parse("C", NumberStyles.HexNumber);
+            p.PCB.TempBufferSize = UInt32.Parse("C", NumberStyles.HexNumber);
             p.PCB.InputBufferSize = UInt32.Parse("14", NumberStyles.HexNumber);
             p.PCB.DiskAddress = startAddress;
             if (offset == 4 || offset == 0)
@@ -191,7 +191,7 @@ namespace OS_PROJECT
                 Console.WriteLine("Process " + p.PCB.ProcessID + " owns page " + page + ".");
             }
             Console.WriteLine("Disk Address: " + p.PCB.DiskAddress.ToString());
-            Console.WriteLine("Input Buffer: " +p.PCB.InputBufferSize.ToString());
+            Console.WriteLine("Input Buffer: " + p.PCB.InputBufferSize.ToString());
             Console.WriteLine("Instruction Length: " + p.PCB.InstructionLength.ToString());
             Console.WriteLine("Output Buffer: " + p.PCB.OutputBufferSize.ToString());
             Console.WriteLine("Temp Buffer: " + p.PCB.TempBufferSize.ToString());

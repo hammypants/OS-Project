@@ -51,6 +51,7 @@ namespace OS_PROJECT
 
         public void RunOS()
         {
+            InterruptHandler.Start();
             MMU.Instantiate(this);
             loader = new Loader(this);
             LTS = new LongTermScheduler(this);
@@ -66,30 +67,6 @@ namespace OS_PROJECT
             loader.Run();
             LTS.Run();
 
-            #region WTF
-            //List<Process> temp = new List<Process>();
-            //for (int i = 0; i < 30; i++)
-            //{
-            //    temp.Add(NewProcessQueue.AccessQueue.ElementAt<Process>(i));
-            //}
-            //foreach (Process p in temp)
-            //{
-            //    Console.Write("Process " + p.PCB.ProcessID + " has pages: ");
-            //    for (uint i = 0; i < 512; i++)
-            //    {
-            //        if (p.PCB.PageTable.table[i].IsOwned)
-            //        {
-            //            Console.Write(i + ", ");
-            //        }
-            //    }
-            //    Console.WriteLine();
-            //    Console.WriteLine();
-            //}
-            #endregion // Don't delete this. WILL SAVE YOUR LIFE LATER.
-
-            
-            Console.ReadKey();
-
             int cpu = 0;
 
             while (shouldRun)
@@ -98,7 +75,7 @@ namespace OS_PROJECT
                 {
                     shouldRun = false;
                 }
-                if (cpuList[cpu].isActive == true)
+                if (cpuList[cpu].isActive == true)  
                 {
                     // Do nothing.
                 }
@@ -108,7 +85,7 @@ namespace OS_PROJECT
                     cpuList[cpu].ResumeCPU();
                 }
                 cpu++;
-                cpu %= numberOfCPUs;
+                cpu %= numberOfCPUs; 
             }
 
             bool wait = true;

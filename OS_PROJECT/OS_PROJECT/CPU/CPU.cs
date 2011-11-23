@@ -18,22 +18,8 @@ namespace OS_PROJECT
         IO, I, R, J, NOP
     }
 
-    public struct CacheLocation
-    {
-        public uint[] Data;
-        public uint Frame;
-        public uint Page;
-    }
-
     class CPU
     {
-        enum CacheType { Instruction, Input, Output, None } 
-
-        Process blockedProcess;
-        bool faulted = false;
-        bool first_fault_completed = false;
-        bool io_wait = true;
-
         Driver kernel;
         Disk disk;
         RAM RAM;
@@ -57,20 +43,12 @@ namespace OS_PROJECT
 
         volatile Object dispatcherLock = new Object();
         volatile Object cacheLock = new Object();
-        volatile Object rwLock = new Object();
 
-        CacheLocation[] cache_instruction = new CacheLocation[4];
-        uint cache_instruction_counter = 0;
-        CacheLocation[] cache_input = new CacheLocation[4];
-        uint cache_input_counter = 0;
-        CacheLocation[] cache_output = new CacheLocation[4];
-        uint cache_output_counter = 0;
+        uint[] cache = new uint[1];
 
         string currentInstruction;
         Instruction currentInstructionOp;
         InstructionType currentInstructionOpType;
-
-        uint sreg1, sreg2, dreg, reg1, reg2, breg, address;
 
         public CPU(Driver k, int id)
         {
@@ -79,15 +57,7 @@ namespace OS_PROJECT
             RAM = k.RAM;
             RQ = k.ReadyQueue;
             cpuPCB = new PCB();
-            for (uint iterator = 0; iterator < 4; iterator++)
-            {
-                cache_instruction[iterator].Data = new uint[4];
-                cache_instruction[iterator].Frame = 257;
-                cache_input[iterator].Data = new uint[4];
-                cache_input[iterator].Frame = 257;
-                cache_output[iterator].Data = new uint[4];
-                cache_output[iterator].Frame = 257;
-            }
+            cache = new uint[1];
             this.id = id;
             thread = new Thread(new ThreadStart(this.Run));
             _suspendEvent = new ManualResetEventSlim(false);
@@ -131,12 +101,8 @@ namespace OS_PROJECT
                 }
                 while (HasProcess())
                 {
-                    faulted = false;
-                    if (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Fetch)
                     Fetch();
-                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Decode))
                     Decode();
-                    if (!faulted && (cpuPCB.CurrentExecutionPhase == ExecutionPhase.Execute))
                     Execute();
                 }
             }
@@ -146,86 +112,47 @@ namespace OS_PROJECT
         {
             lock (dispatcherLock)
             {
-                kernel.Dispatcher.DispatchProcess(this);
-                if (currentProcess != null)
+                if (InterruptHandler.ServicedProcessesCount() == 0)
                 {
-                    cpuPCB._waitingTime.Stop();
-                    cpuPCB.waitingTime = cpuPCB._waitingTime.Elapsed.TotalMilliseconds;
-                    Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " (Priority: " + currentProcess.PCB.Priority + " | Instr. Length: " + currentProcess.PCB.InstructionLength +
-                        ") spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
-                    processCounter++;
-                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    FillCache();
-                    totalElapsedTime.Start();
+                    kernel.Dispatcher.DispatchProcess(this);
+                    if (currentProcess != null)
+                    {
+                        cpuPCB._waitingTime.Stop();
+                        cpuPCB.waitingTime = cpuPCB._waitingTime.Elapsed.TotalMilliseconds;
+                        Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " (Priority: " + currentProcess.PCB.Priority + " | Instr. Length: " + currentProcess.PCB.InstructionLength +
+                            ") spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
+                        processCounter++;
+                        FillInitalCache();
+                        totalElapsedTime.Start();
+                    }
+                }
+                else
+                {
+                    currentProcess = InterruptHandler.DequeueProcess();
+                    cpuPCB = currentProcess.PCB;
                 }
             }
         }
 
-        void FillCache()
+        void FillInitalCache()
         {
             lock (cacheLock)
             {
-                for (uint iterator = 0; iterator < 4; iterator++)
+                uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
+                uint frame;
+                for (uint i = firstPage; i < 4; i++)
                 {
-                    cache_instruction[iterator].Data = MMU.ReadFrame(cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame);
-                    cache_instruction[iterator].Frame = cpuPCB.PageTable.table[(cpuPCB.DiskAddress / 4) + iterator].Frame;
-                    cache_instruction[iterator].Page = cpuPCB.DiskAddress / 4 + iterator;
-                    cache_input[iterator].Data = new uint[4];
-                    cache_input[iterator].Frame = 257;
-                    cache_input[iterator].Page = 513;
-                    cache_output[iterator].Data = new uint[4];
-                    cache_output[iterator].Frame = 257;
-                    cache_output[iterator].Page = 513;
+                    frame = cpuPCB.PageTable.table[i].Frame;
+                    cpuPCB.Cache_Instruction.Write(MMU.ReadFrame(frame), i);
+                    cpuPCB.Cache_Instruction.MapFrame(i, frame);
                 }
             }
         }
 
         void Fetch()
         {
-            if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[0].Page)
-            {
-                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[0].Data[cpuPCB.ProgramCounter % 4]);
-                cpuPCB.ProgramCounter++;
-                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
-            }
-            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[1].Page)
-            {
-                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[1].Data[cpuPCB.ProgramCounter % 4]);
-                cpuPCB.ProgramCounter++;
-                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
-            }
-            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[2].Page)
-            {
-                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[2].Data[cpuPCB.ProgramCounter % 4]);
-                cpuPCB.ProgramCounter++;
-                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
-            }
-            else if (((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4) == cache_instruction[3].Page)
-            {
-                currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache_instruction[3].Data[cpuPCB.ProgramCounter % 4]);
-                cpuPCB.ProgramCounter++;
-                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Decode;
-            }
-            else
-            {
-                // not in cache, so check to see if it's in memory before we bring it in
-                if (cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].InMemory)
-                {
-                    // in memory, load it into a cache?
-
-                    // copying cache to its frame before we replace the cache frame -- only works for instructions
-                    MMU.WriteCacheFrameToFrame(cache_instruction[cache_instruction_counter].Data, cache_instruction[cache_instruction_counter].Frame);
-                    cache_instruction[cache_instruction_counter].Data = MMU.ReadFrame(cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame);
-                    cache_instruction[cache_instruction_counter].Page = ((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4);
-                    cache_instruction[cache_instruction_counter++].Frame = cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame;
-                    cache_instruction_counter = cache_instruction_counter % 4;
-                }
-                else
-                { 
-                    // not in memory, page fault bitches!
-                    PageFault(((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4), CacheType.Instruction);
-                }
-            }
+            //currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache[cpuPCB.ProgramCounter++]);
+            currentInstruction = SystemCaller.ConvertInputDataToHexstring(ReadFromCache(cpuPCB.ProgramCounter++));
         }
 
         void Decode()
@@ -239,9 +166,9 @@ namespace OS_PROJECT
             currentInstructionCopy = currentInstructionCopy.Substring(2, 6);
             currentInstruction = currentInstructionCopy;
 
+            #region Instr Switch
             switch (firstTwoHexChars)
             {
-                #region Switches
                 case "C0"://RD
                     currentInstructionOpType = InstructionType.IO;
                     currentInstructionOp = Instruction.RD;
@@ -353,538 +280,211 @@ namespace OS_PROJECT
                 default:
                     Console.WriteLine("oops!");
                     break;
-                #endregion
             }
-
+            #endregion
+            #region Reg Switch
             switch (currentInstructionOpType)
             {
                 case InstructionType.R:
-                    sreg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
-                    sreg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
-                    dreg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 1));
+                    cpuPCB.reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
+                    cpuPCB.reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
+                    cpuPCB.dreg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 1));
                     break;
                 case InstructionType.IO:
                     cpuPCB.IoCount++;
                     if (currentInstructionOp == Instruction.RD)
                     {
-                        reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
-                        reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
-                        address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        address += cpuPCB.SeparationOffset;
+                        cpuPCB.reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
+                        cpuPCB.reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
+                        cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
+                        cpuPCB.address += cpuPCB.SeparationOffset;
                     }
                     else if (currentInstructionOp == Instruction.WR)
                     {
-                        reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
-                        reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
-                        address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        address += cpuPCB.SeparationOffset;
+                        cpuPCB.reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
+                        cpuPCB.reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
+                        cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
+                        cpuPCB.address += cpuPCB.SeparationOffset;
                     }
                     break;
                 case InstructionType.I:
-                    breg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
-                    dreg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
-                    address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4));
+                    cpuPCB.breg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
+                    cpuPCB.dreg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
+                    cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4));
+                    cpuPCB.address += cpuPCB.SeparationOffset;
                     break;
                 case InstructionType.J:
-                    address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 6)) / 4;
+                    cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 6)) / 4;
+                    cpuPCB.address += cpuPCB.SeparationOffset;
                     break;
                 case InstructionType.NOP:
                     break;
             }
-            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Execute;
+            #endregion
         }
 
         void Execute()
         {
             switch (currentInstructionOp)
             {
-                case Instruction.RD: // FIXED? x2
+                case Instruction.RD:
                     // Reads the content of IP buffer into a accumulator.
-                    #region RD
-                    // cpuPCB.register[reg1].WriteToRegister(cache[address])
-                    if (reg2 == 0)
+                    //Console.Write("Reading ");
+                    if (cpuPCB.reg2 == 0)
                     {
-                        // check if cache or ram
-                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input) // should it be in this cache type?
-                        {
-                            if (CheckCacheForPage(address, CacheType.Input)) // should be in this cache, check to make sure it's in there
-                            {
-                                cpuPCB.register[reg1].WriteToRegister(cache_input[GetCacheLocation(address, CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(address, CacheType.Input), address)]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(address, CacheType.Input);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(address, CacheType.Output))
-                            {
-                                cpuPCB.register[reg1].WriteToRegister(cache_output[GetCacheLocation(address, CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(address, CacheType.Output), address)]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(address, CacheType.Output);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // in memory
-                            {
-                                IOFault_Read(address, CacheType.None);
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + address) / 4, CacheType.None);
-                            }
-                        }
+                        //Console.WriteLine("data ["+cache[cpuPCB.address].ToString()+"] from cpuPCB.address ["+cpuPCB.address.ToString()+"] to Register " + cpuPCB.reg1 + ".");
+                        //cpuPCB.register[cpuPCB.reg1].WriteToRegister(cache[cpuPCB.address]);
+                        cpuPCB.register[cpuPCB.reg1].WriteToRegister(ReadFromCache(cpuPCB.address));
                     }
                     else
                     {
-                        if (ReturnCacheTypeFromAddress(cpuPCB.register[reg2].ReadData()) == CacheType.Input)
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Input))
-                            {
-                                cpuPCB.register[reg1].WriteToRegister(cache_input[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input), cpuPCB.register[reg2].ReadData())]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(cpuPCB.register[reg2].ReadData(), CacheType.Input);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(cpuPCB.register[reg2].ReadData()) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Output))
-                            {
-                                cpuPCB.register[reg1].WriteToRegister(cache_input[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output), cpuPCB.register[reg2].ReadData())]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(cpuPCB.register[reg2].ReadData(), CacheType.Output);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory)
-                            {
-                                IOFault_Read(cpuPCB.register[reg2].ReadData(), CacheType.None);
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4, CacheType.None);
-                            }
-                        }
-                        //cpuPCB.register[reg1].WriteToRegister(cache[cpuPCB.register[reg2].ReadData()]);
+                        //Console.WriteLine("data [" + cpuPCB.register[cpuPCB.reg2].ReadData() + "] from Register "+cpuPCB.reg2+" to Register "+cpuPCB.reg1+".");
+                        //cpuPCB.register[cpuPCB.reg1].WriteToRegister(cache[cpuPCB.register[cpuPCB.reg2].ReadData()]);
+                        cpuPCB.register[cpuPCB.reg1].WriteToRegister(ReadFromCache(cpuPCB.register[cpuPCB.reg2].ReadData()));
                     }
+                    //Console.WriteLine("Completed: Register "+cpuPCB.reg1+" now contains " + cpuPCB.register[cpuPCB.reg1].ReadData().ToString() +
+                        //" and Register "+cpuPCB.reg2+" now contains " + cpuPCB.register[cpuPCB.reg2].ReadData().ToString());
                     break;
-                    #endregion
-                case Instruction.WR: // FIXED? x2
+                case Instruction.WR:
                     // Writes the content of the accumulator into the OP buffer
-                    #region WR
-                    if (address == 0)
+                    //Console.WriteLine("Writing ");
+                    if (cpuPCB.address == 0)
                     {
-                        //cache[cpuPCB.register[reg2].ReadData()] = cpuPCB.register[reg1].ReadData();
-                        if (ReturnCacheTypeFromAddress(cpuPCB.register[reg2].ReadData()) == CacheType.Input) // should it be in this cache type?
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Input)) // should be in this cache, check to make sure it's in there
-                            {
-                                cache_input[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Input), cpuPCB.register[reg2].ReadData())] = cpuPCB.register[reg1].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Write((cpuPCB.register[reg1].ReadData()), cpuPCB.register[reg2].ReadData());
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(cpuPCB.register[reg2].ReadData()) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[reg2].ReadData(), CacheType.Output))
-                            {
-                                cache_output[GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[reg2].ReadData(), CacheType.Output), cpuPCB.register[reg2].ReadData())] = cpuPCB.register[reg1].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Write((cpuPCB.register[reg1].ReadData()), cpuPCB.register[reg2].ReadData());
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4].InMemory) // in memory
-                            {
-                                IOFault_Write((cpuPCB.register[reg1].ReadData()), cpuPCB.register[reg2].ReadData());
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + cpuPCB.register[reg2].ReadData()) / 4, CacheType.None);
-                            }
-                        }
+                        //Console.WriteLine("Register 1 is Register " + cpuPCB.reg1 + " and Register 2 is " + cpuPCB.reg2 + ".");
+                        //Console.WriteLine("Register " + cpuPCB.reg1 + " contains " + cpuPCB.register[cpuPCB.reg1].ReadData());
+                        //Console.WriteLine("Register " + cpuPCB.reg2 + " contains " + cpuPCB.register[cpuPCB.reg2].ReadData());
+                        //Console.WriteLine("data [" + cpuPCB.register[cpuPCB.reg1].ReadData() + "] from Register "+cpuPCB.reg1+" to Register "+cpuPCB.reg2+".");
+                        //cache[cpuPCB.register[cpuPCB.reg2].ReadData()] = cpuPCB.register[cpuPCB.reg1].ReadData();
+                        WriteToCache(cpuPCB.register[cpuPCB.reg1].ReadData(), cpuPCB.register[cpuPCB.reg2].ReadData());
+                        //Console.WriteLine(cache[cpuPCB.register[cpuPCB.reg2].ReadData()]);
                     }
                     else
                     {
-                        //cache[address] = cpuPCB.register[reg1].ReadData();
-                        if (ReturnCacheTypeFromAddress(address) == CacheType.Input) // should it be in this cache type?
-                        {
-                            if (CheckCacheForPage(address, CacheType.Input)) // should be in this cache, check to make sure it's in there
-                            {
-                                cache_input[GetCacheLocation(address, CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(address, CacheType.Input), address)] = cpuPCB.register[reg1].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Write(cpuPCB.register[reg1].ReadData(),(cpuPCB.DiskAddress + address));
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(address) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(address, CacheType.Output))
-                            {
-                                cache_output[GetCacheLocation(address, CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(address, CacheType.Output), address)] = cpuPCB.register[reg1].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Write(cpuPCB.register[reg1].ReadData(), (cpuPCB.DiskAddress + address));
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].InMemory) // in memory
-                            {
-                                IOFault_Write(cpuPCB.register[reg1].ReadData(), (cpuPCB.DiskAddress + address));
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + address) / 4, CacheType.None);
-                            }
-                        }
-
+                        //Console.WriteLine("data [" + cpuPCB.register[cpuPCB.reg1].ReadData() + "] from Register 1 to cpuPCB.address [" + cpuPCB.address + "].");
+                        //cache[cpuPCB.address] = cpuPCB.register[cpuPCB.reg1].ReadData();
+                        WriteToCache(cpuPCB.register[cpuPCB.reg1].ReadData(), cpuPCB.address);
                     }
+                    //Console.WriteLine("Completed.");
                     break;
-                    #endregion
-                case Instruction.ST: // *** FIXED? x2
-                    // Stores the content of a register into an address
-                    #region ST
-                    if (dreg == 0)
+                case Instruction.ST: // ***
+                    // Stores the content of a register into an cpuPCB.address
+                    //Console.WriteLine("Storing content of a register into an cpuPCB.address/register.");
+                    if (cpuPCB.dreg == 0)
                     {
-                        //cpuPCB.register[dreg].WriteToRegister(cache[address]);
-                        if (ReturnCacheTypeFromAddress(address + cpuPCB.SeparationOffset) == CacheType.Input) // should it be in this cache type?
-                        {
-                            if (CheckCacheForPage(address + cpuPCB.SeparationOffset, CacheType.Input)) // should be in this cache, check to make sure it's in there
-                            {
-                                cpuPCB.register[dreg].WriteToRegister(cache_input[GetCacheLocation(address + cpuPCB.SeparationOffset, CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(((address + cpuPCB.SeparationOffset)), CacheType.Input), address + cpuPCB.SeparationOffset)]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(address + cpuPCB.SeparationOffset, CacheType.Input);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(address + cpuPCB.SeparationOffset) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(address + cpuPCB.SeparationOffset, CacheType.Output))
-                            {
-                                cpuPCB.register[dreg].WriteToRegister(cache_output[GetCacheLocation(address + cpuPCB.SeparationOffset, CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(((address + cpuPCB.SeparationOffset)), CacheType.Output), address + cpuPCB.SeparationOffset)]);
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(address + cpuPCB.SeparationOffset, CacheType.Output);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4].InMemory) // in memory
-                            {
-                                IOFault_Read(address + cpuPCB.SeparationOffset, CacheType.None);
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + address + cpuPCB.SeparationOffset) / 4, CacheType.None);
-                            }
-                        }
+                    //    Console.WriteLine("Writing data " + cache[cpuPCB.address] + " from cpuPCB.address " + cpuPCB.address + ".");
+                        //cpuPCB.register[cpuPCB.dreg].WriteToRegister(cache[cpuPCB.address]);
+                        cpuPCB.register[cpuPCB.dreg].WriteToRegister(ReadFromCache(cpuPCB.address));
+                        //Console.WriteLine("Completed. Destination register now contains " + cpuPCB.register[cpuPCB.dreg].ReadData() + ".");
                     }
                     else
                     {
-                        //cache[cpuPCB.register[dreg].ReadData()] = cpuPCB.register[breg].ReadData();
-                        if (ReturnCacheTypeFromAddress(cpuPCB.register[dreg].ReadData()) == CacheType.Input) // should it be in this cache type?
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[dreg].ReadData(), CacheType.Input)) // should be in this cache, check to make sure it's in there
-                            {
-                                cache_input[GetCacheLocation(cpuPCB.register[dreg].ReadData(), CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[dreg].ReadData(),CacheType.Input),cpuPCB.register[dreg].ReadData())] = cpuPCB.register[breg].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(cpuPCB.register[dreg].ReadData(), CacheType.Input);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4), CacheType.Input);
-                                }
-                            }
-                        }
-                        else if (ReturnCacheTypeFromAddress(cpuPCB.register[dreg].ReadData()) == CacheType.Output)
-                        {
-                            if (CheckCacheForPage(cpuPCB.register[dreg].ReadData(), CacheType.Output))
-                            {
-                                cache_output[GetCacheLocation(cpuPCB.register[dreg].ReadData(), CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation(cpuPCB.register[dreg].ReadData(), CacheType.Output), cpuPCB.register[dreg].ReadData())] = cpuPCB.register[breg].ReadData();
-                                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                            }
-                            else // not in its supposed cache
-                            {
-                                if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4].InMemory) // is in memory
-                                {
-                                    IOFault_Read(cpuPCB.register[dreg].ReadData(), CacheType.Output);
-                                }
-                                else // not in memory
-                                {
-                                    PageFault(((cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4), CacheType.Output);
-                                }
-                            }
-                        }
-                        else // must be RAM
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4].InMemory) // in memory
-                            {
-                                IOFault_Read(cpuPCB.register[dreg].ReadData(), CacheType.None);
-                            }
-                            else // not in memory
-                            {
-                                PageFault((cpuPCB.DiskAddress + cpuPCB.register[dreg].ReadData()) / 4, CacheType.None);
-                            }
-                        }
+                        //Console.WriteLine("Register " + cpuPCB.breg + " contains " + cpuPCB.register[cpuPCB.breg].ReadData() + ".");
+                        //Console.WriteLine("Writing to the cpuPCB.address pointed to by Register " + cpuPCB.dreg + " from Register " + cpuPCB.breg + ".");
+                        //cache[cpuPCB.register[cpuPCB.dreg].ReadData()] = cpuPCB.register[cpuPCB.breg].ReadData();
+                        WriteToCache(cpuPCB.register[cpuPCB.breg].ReadData(), cpuPCB.register[cpuPCB.dreg].ReadData());
+                        //Console.WriteLine("cpuPCB.address location " + cpuPCB.register[cpuPCB.dreg].ReadData() + " is now " + cache[cpuPCB.register[cpuPCB.dreg].ReadData()] + ".");
                     }
                     break;
-                    #endregion
-                case Instruction.LW: // FIXED? x2
-                    // Loads the content of an address into a register
-                    #region LW
-                    //cpuPCB.register[dreg].WriteToRegister(cache[cpuPCB.register[breg].ReadData() + address]);
-                    if (ReturnCacheTypeFromAddress((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) == CacheType.Input) // should it be in this cache type?
-                    {
-                        if (CheckCacheForPage((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset), CacheType.Input)) // should be in this cache, check to make sure it's in there
-                        {
-                            cpuPCB.register[dreg].WriteToRegister(
-                                cache_input[GetCacheLocation(cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset, CacheType.Input)].Data[GetLocationWithinCache(GetCacheLocation((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset), CacheType.Input), (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset))]);
-                            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                        }
-                        else // not in its supposed cache
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4].InMemory) // is in memory
-                            {
-                                IOFault_Read((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset) / 4, CacheType.Input);
-                            }
-                            else // not in memory
-                            {
-                                PageFault(((cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4), CacheType.Input);
-                            }
-                        }
-                    }
-                    else if (ReturnCacheTypeFromAddress((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) == CacheType.Output)
-                    {
-                        if (CheckCacheForPage((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset), CacheType.Output))
-                        {
-                            cpuPCB.register[dreg].WriteToRegister(
-                                cache_output[GetCacheLocation(cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset, CacheType.Output)].Data[GetLocationWithinCache(GetCacheLocation((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset), CacheType.Output), (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset))]);
-                            cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                        }
-                        else // not in its supposed cache
-                        {
-                            if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4].InMemory) // is in memory
-                            {
-                                IOFault_Read((cpuPCB.register[breg].ReadData() + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4, CacheType.Output);
-                            }
-                            else // not in memory
-                            {
-                                PageFault(((cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4), CacheType.Output);
-                            }
-                        }
-                    }
-                    else // must be RAM
-                    {
-                        if (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4].InMemory) // in memory
-                        {
-                            IOFault_Read((cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset), CacheType.None);
-                        }
-                        else // not in memory
-                        {
-                            PageFault((cpuPCB.DiskAddress + (cpuPCB.register[breg].ReadData() + address + cpuPCB.SeparationOffset)) / 4, CacheType.None);
-                        }
-                    }
+                case Instruction.LW:
+                    // Loads the content of an cpuPCB.address into a register
+                    //Console.WriteLine("Writing contents of cpuPCB.address " + cpuPCB.register[9].ReadData() + " to register " + cpuPCB.dreg);
+                    //cpuPCB.register[cpuPCB.dreg].WriteToRegister(cache[cpuPCB.register[cpuPCB.breg].ReadData() + cpuPCB.address]);
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(ReadFromCache(cpuPCB.register[cpuPCB.breg].ReadData() + cpuPCB.address));
+                    //Console.WriteLine("Register " + cpuPCB.dreg + " is now " + cpuPCB.register[cpuPCB.dreg].ReadData());
                     break;
-                    #endregion
                 case Instruction.MOV:
                     // Transfers the content of one register into another
-                    //Console.WriteLine("Register " + sreg1 + " is receiving data from Register " + sreg2 + ".");
-                    cpuPCB.register[sreg1].WriteToRegister(cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    //Console.WriteLine(cpuPCB.register[sreg1].ReadData());
+                    //Console.WriteLine("Register " + cpuPCB.scpuPCB.reg1 + " is receiving data from Register " + cpuPCB.scpuPCB.reg2 + ".");
+                    cpuPCB.register[cpuPCB.reg1].WriteToRegister(cpuPCB.register[cpuPCB.reg2].ReadData());
+                    //Console.WriteLine(cpuPCB.register[cpuPCB.scpuPCB.reg1].ReadData());
                     break;
                 case Instruction.ADD://ADD
-                    // Adds the contents of two Sregs into Dreg
-                    //Console.WriteLine("S-register 1 is register " + sreg1 + " and S-register 2 is register " + sreg2 + " and D-register is register " + dreg + ".");
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() + cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    //Console.WriteLine("Completed. Register " + dreg + " is " + cpuPCB.register[dreg].ReadData() + ".");
+                    // Adds the contents of two Sregs into cpuPCB.dreg
+                    //Console.WriteLine("S-register 1 is register " + cpuPCB.scpuPCB.reg1 + " and S-register 2 is register " + cpuPCB.scpuPCB.reg2 + " and D-register is register " + cpuPCB.dreg + ".");
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() + cpuPCB.register[cpuPCB.reg2].ReadData());
+                    //Console.WriteLine("Completed. Register " + cpuPCB.dreg + " is " + cpuPCB.register[cpuPCB.dreg].ReadData() + ".");
                     break;
                 case Instruction.SUB://SUB
-                    // Subtracts the contents of two Sregs into Dreg
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() - cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Subtracts the contents of two Sregs into cpuPCB.dreg
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() - cpuPCB.register[cpuPCB.reg2].ReadData());
                     break;
                 case Instruction.MUL:
-                    // Multiplies the contents of two Sregs into Dreg
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() * cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Multiplies the contents of two Sregs into cpuPCB.dreg
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() * cpuPCB.register[cpuPCB.reg2].ReadData());
                     break;
                 case Instruction.DIV:
-                    // Divides the contents of two Sregs into Dreg
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() / cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Divides the contents of two Sregs into cpuPCB.dreg
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() / cpuPCB.register[cpuPCB.reg2].ReadData());
                     break;
                 case Instruction.AND:
-                    // Logical AND of two Sregs into Dreg
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() & cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Logical AND of two Sregs into cpuPCB.dreg
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() & cpuPCB.register[cpuPCB.reg2].ReadData());
                     break;
                 case Instruction.OR:
-                    // Logical OR of two Sregs into Dreg
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[sreg1].ReadData() | cpuPCB.register[sreg2].ReadData()); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Logical OR of two Sregs into cpuPCB.dreg
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.reg1].ReadData() | cpuPCB.register[cpuPCB.reg2].ReadData());
                     break;
                 case Instruction.MOVI:
-                    // Transfers an address/data directly into a register
-                    //Console.WriteLine("Moving address ["+address+"] into Destination Register ["+dreg+"].");
-                    cpuPCB.register[dreg].WriteToRegister(address);
-                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    //Console.WriteLine("Completed. Destination register now contains [" + cpuPCB.register[dreg].ReadData() + "].");
+                    // Transfers an cpuPCB.address/data directly into a register
+                    //Console.WriteLine("Moving cpuPCB.address ["+cpuPCB.address+"] into Destination Register ["+cpuPCB.dreg+"].");
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.address);
+                    //Console.WriteLine("Completed. Destination register now contains [" + cpuPCB.register[cpuPCB.dreg].ReadData() + "].");
                     break;
                 case Instruction.ADDI:
                     // Adds data directly to the content of a register
-                    //Console.WriteLine("Adding data or addressing directly to the register.");
+                    //Console.WriteLine("Adding data or cpuPCB.addressing directly to the register.");
                     // Handle increment by 1.
-                    if (address == 1)
+                    if (cpuPCB.address == 1)
                     {
-                        //Console.WriteLine("Address == 1, using as data for incrementation.");
-                        cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[dreg].ReadData() + 1); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                        //Console.WriteLine("D-reg " + dreg + " is now " + cpuPCB.register[dreg].ReadData() + ".");
+                        //Console.WriteLine("cpuPCB.address == 1, using as data for incrementation.");
+                        cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.dreg].ReadData() + 1);
+                        //Console.WriteLine("D-reg " + cpuPCB.dreg + " is now " + cpuPCB.register[cpuPCB.dreg].ReadData() + ".");
                     }
-                    // Handle incrementation by addressing.
+                    // Handle incrementation by cpuPCB.addressing.
                     else
                     {
-                        //Console.WriteLine("Address is not one, using addressing. Giving " + address + " to Destination register " + dreg + ".");
-                        cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[dreg].ReadData() + (address / 4)); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                        //Console.WriteLine("Completed. Destination register now contains the address " + cpuPCB.register[dreg].ReadData() + ".");
+                        //Console.WriteLine("cpuPCB.address is not one, using cpuPCB.addressing. Giving " + cpuPCB.address + " to Destination register " + cpuPCB.dreg + ".");
+                        cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.dreg].ReadData() + (cpuPCB.address/4));
+                        //Console.WriteLine("Completed. Destination register now contains the cpuPCB.address " + cpuPCB.register[cpuPCB.dreg].ReadData() + ".");
                     }
                     break;
                 case Instruction.MULI:
                     // Multiplies data directly to the content of a register
-                    // Assuming address will always be data.
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[dreg].ReadData() * address); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Assuming cpuPCB.address will always be data.
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.dreg].ReadData() * cpuPCB.address);
                     break;
                 case Instruction.DIVI:
                     // Divides data directly to the content of a register
-                    // Assuming address will always be data.
-                    cpuPCB.register[dreg].WriteToRegister(cpuPCB.register[dreg].ReadData() / address); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Assuming cpuPCB.address will always be data.
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.register[cpuPCB.dreg].ReadData() / cpuPCB.address);
                     break;
                 case Instruction.LDI:
-                    // Loads data/address directly to the content of a register
-                    //Console.WriteLine("Loading address " + address/4 + " into Destination Register " + dreg + ".");
-                    cpuPCB.register[dreg].WriteToRegister(address/4); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    //Console.WriteLine("Completed. Destination register is now " + cpuPCB.register[dreg].ReadData() + ".");
+                    // Loads data/cpuPCB.address directly to the content of a register
+                    //Console.WriteLine("Loading cpuPCB.address " + cpuPCB.address/4 + " into Destination Register " + cpuPCB.dreg + ".");
+                    cpuPCB.register[cpuPCB.dreg].WriteToRegister(cpuPCB.address/4);
+                    //Console.WriteLine("Completed. Destination register is now " + cpuPCB.register[cpuPCB.dreg].ReadData() + ".");
                     break;
                 case Instruction.SLT:
-                    // Sets the D-reg to 1 if first Sreg1 is less than second Sreg2, 0 otherwise
-                    //Console.WriteLine("Checking S-reg "+sreg1+" < S-reg "+sreg2+".");
-                    //Console.WriteLine(cpuPCB.register[sreg1].ReadData() + " < " + cpuPCB.register[sreg2].ReadData());
-                    //Console.WriteLine("Destination register is register " + dreg);
-                    if (cpuPCB.register[sreg1].ReadData() < cpuPCB.register[sreg2].ReadData())
+                    // Sets the D-reg to 1 if first cpuPCB.scpuPCB.reg1 is less than second cpuPCB.scpuPCB.reg2, 0 otherwise
+                    //Console.WriteLine("Checking S-reg "+cpuPCB.scpuPCB.reg1+" < S-reg "+cpuPCB.scpuPCB.reg2+".");
+                    //Console.WriteLine(cpuPCB.register[cpuPCB.scpuPCB.reg1].ReadData() + " < " + cpuPCB.register[cpuPCB.scpuPCB.reg2].ReadData());
+                    //Console.WriteLine("Destination register is register " + cpuPCB.dreg);
+                    if (cpuPCB.register[cpuPCB.reg1].ReadData() < cpuPCB.register[cpuPCB.reg2].ReadData())
                     {
-                        //Console.WriteLine("True. Writing 1 to Destination Register " + dreg + ".");
-                        cpuPCB.register[dreg].WriteToRegister(1); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                        //Console.WriteLine("True. Writing 1 to Destination Register " + cpuPCB.dreg + ".");
+                        cpuPCB.register[cpuPCB.dreg].WriteToRegister(1); 
                     }
                     else
                     {
-                        //Console.WriteLine("False. Writing 0 to Destination Register " + dreg + ".");
-                        cpuPCB.register[dreg].WriteToRegister(0); cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                        //Console.WriteLine("False. Writing 0 to Destination Register " + cpuPCB.dreg + ".");
+                        cpuPCB.register[cpuPCB.dreg].WriteToRegister(0);
                     }
                     //Console.WriteLine("Completed.");
                     break;
                 case Instruction.SLTI:
                     // Sets the D-reg to 1 if first Sreg is less than data, 0 otherwise
-                    if (breg < address) cpuPCB.register[dreg].WriteToRegister(1);
-                    else cpuPCB.register[dreg].WriteToRegister(0);
-                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    if (cpuPCB.breg < cpuPCB.address) cpuPCB.register[cpuPCB.dreg].WriteToRegister(1);
+                    else cpuPCB.register[cpuPCB.dreg].WriteToRegister(0);
                     break;
                 case Instruction.HLT:
                     // Logical end of program
@@ -895,7 +495,6 @@ namespace OS_PROJECT
                     //    // Reading contents of memory.
                     //    Console.WriteLine(cache[i]);
                     //}
-                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                     ProcessFinished();
                     break;
                 case Instruction.NOP:
@@ -903,56 +502,53 @@ namespace OS_PROJECT
                     break;
                 case Instruction.JMP:
                     // Jumps to a specified location
-                    cpuPCB.ProgramCounter = address; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    cpuPCB.ProgramCounter = cpuPCB.address;
                     break;
                 case Instruction.BEQ:
-                    // Branches to an address when the content of Breg = Dreg
-                    //Console.WriteLine("Checking B-reg " + breg + " != D-reg " + dreg + ".");
-                    if (cpuPCB.register[breg].ReadData() == cpuPCB.register[dreg].ReadData())
+                    // Branches to an cpuPCB.address when the content of cpuPCB.breg = cpuPCB.dreg
+                    //Console.WriteLine("Checking B-reg " + cpuPCB.breg + " != D-reg " + cpuPCB.dreg + ".");
+                    if (cpuPCB.register[cpuPCB.breg].ReadData() == cpuPCB.register[cpuPCB.dreg].ReadData())
                     {
-                        //Console.WriteLine("True. Jumping to address " + address + ".");
-                        cpuPCB.ProgramCounter = address / 4; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                        //Console.WriteLine("True. Jumping to cpuPCB.address " + cpuPCB.address + ".");
+                        cpuPCB.ProgramCounter = cpuPCB.address/4;
                     }
                     else
                     {
                         //Console.WriteLine("False. Continuing on. Current PC is " + cpuPCB.ProgramCounter);
-                        cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                     }
                     //Console.WriteLine("Completed.");
                     break;
                 case Instruction.BNE:
-                    // Branches to an address when the content of Breg <> Dreg
-                    //Console.WriteLine("Checking B-reg " + breg + " != D-reg " + dreg + ".");
-                    if (cpuPCB.register[breg].ReadData() != cpuPCB.register[dreg].ReadData())
+                    // Branches to an cpuPCB.address when the content of cpuPCB.breg <> cpuPCB.dreg
+                    //Console.WriteLine("Checking B-reg " + cpuPCB.breg + " != D-reg " + cpuPCB.dreg + ".");
+                    if (cpuPCB.register[cpuPCB.breg].ReadData() != cpuPCB.register[cpuPCB.dreg].ReadData())
                     {
-                        //Console.WriteLine("True. Jumping to address " + address + ".");
-                        cpuPCB.ProgramCounter = address / 4; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                        //Console.WriteLine("True. Jumping to cpuPCB.address " + cpuPCB.address + ".");
+                        cpuPCB.ProgramCounter = cpuPCB.address/4;
                     }
                     else
                     {
                         //Console.WriteLine("False. Continuing on. Current PC is " + cpuPCB.ProgramCounter);
-                        cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                     }
                     //Console.WriteLine("Completed.");
                     break;
                 case Instruction.BEZ:
-                    // Branches to an address when the content of Dreg = 0
-                    if (cpuPCB.register[dreg].ReadData() == 0) cpuPCB.ProgramCounter = address; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Branches to an cpuPCB.address when the content of cpuPCB.dreg = 0
+                    if (cpuPCB.register[cpuPCB.dreg].ReadData() == 0) cpuPCB.ProgramCounter = cpuPCB.address;
                     break;
                 case Instruction.BNZ:
-                    // Branches to an address when the content of Breg <> 0
-                    if (cpuPCB.register[breg].ReadData() != 0) cpuPCB.ProgramCounter = address; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Branches to an cpuPCB.address when the content of cpuPCB.breg <> 0
+                    if (cpuPCB.register[cpuPCB.breg].ReadData() != 0) cpuPCB.ProgramCounter = cpuPCB.address;
                     break;
                 case Instruction.BGZ:
-                    // Branches to an address when the content of Breg > 0
-                    if (cpuPCB.register[breg].ReadData() > 0) cpuPCB.ProgramCounter = address; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Branches to an cpuPCB.address when the content of cpuPCB.breg > 0
+                    if (cpuPCB.register[cpuPCB.breg].ReadData() > 0) cpuPCB.ProgramCounter = cpuPCB.address;
                     break;
                 case Instruction.BLZ:
-                    // Branches to an address when the content of Breg < 0
-                    if (cpuPCB.register[breg].ReadData() < 0) cpuPCB.ProgramCounter = address; cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
+                    // Branches to an cpuPCB.address when the content of cpuPCB.breg < 0
+                    if (cpuPCB.register[cpuPCB.breg].ReadData() < 0) cpuPCB.ProgramCounter = cpuPCB.address;
                     break;
                 default:
-                    cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
                     Console.WriteLine("OOPS!");
                     break;
             }
@@ -961,51 +557,7 @@ namespace OS_PROJECT
         void SaveProcessStatus()
         {
             // Save process's PCB as CPU's PCB.
-            cpuPCB.cache_instruction = cache_instruction;
-            cpuPCB.cache_input = cache_input;
-            cpuPCB.cache_output = cache_output;
-            cpuPCB.cache_output_counter = cache_output_counter;
-            cpuPCB.cache_instruction_counter = cache_instruction_counter;
-            cpuPCB.cache_input_counter = cache_input_counter;
-            cpuPCB.address = address;
-            cpuPCB.breg = breg;
-            cpuPCB.dreg = dreg;
-            cpuPCB.reg1 = reg1;
-            cpuPCB.reg2 = reg2;
-            cpuPCB.sreg1 = sreg1;
-            cpuPCB.sreg2 = sreg2;
             currentProcess.PCB = cpuPCB;
-        }
-
-        void SetCPURegsAndCacheToProcessPCB(Process p)
-        {
-            cpuPCB.cache_instruction = p.PCB.cache_instruction;
-            cpuPCB.cache_input = p.PCB.cache_input;
-            cpuPCB.cache_output = p.PCB.cache_output;
-            cpuPCB.cache_output_counter = p.PCB.cache_output_counter;
-            cpuPCB.cache_instruction_counter = p.PCB.cache_instruction_counter;
-            cpuPCB.cache_input_counter = p.PCB.cache_input_counter;
-            cpuPCB.address = p.PCB.address;
-            cpuPCB.breg = p.PCB.breg;
-            cpuPCB.dreg = p.PCB.dreg;
-            cpuPCB.reg1 = p.PCB.reg1;
-            cpuPCB.reg2 = p.PCB.reg2;
-            cpuPCB.sreg1 = p.PCB.sreg1;
-            cpuPCB.sreg2 = p.PCB.sreg2;
-
-            cache_instruction = cpuPCB.cache_instruction;
-            cache_input = cpuPCB.cache_input;
-            cache_output = cpuPCB.cache_output;
-            cache_output_counter = cpuPCB.cache_output_counter;
-            cache_instruction_counter = cpuPCB.cache_instruction_counter;
-            cache_input_counter = cpuPCB.cache_input_counter;
-            address = cpuPCB.address;
-            breg = cpuPCB.breg;
-            dreg = cpuPCB.dreg;
-            reg1 = cpuPCB.reg1;
-            reg2 = cpuPCB.reg2;
-            sreg1 = cpuPCB.sreg1;
-            sreg2 = cpuPCB.sreg2;
         }
 
         void ProcessFinished()
@@ -1013,17 +565,10 @@ namespace OS_PROJECT
             totalElapsedTime.Stop();
             cpuPCB.completionTime = totalElapsedTime.Elapsed.TotalMilliseconds;
             SaveProcessStatus();
-            CopyProcessMemoryToDisk();
-            ReturnProcessFramesToMemory();
             kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
             Console.WriteLine("Elapsed time for CPU " + id + " to run job " + cpuPCB.ProcessID + " was " + totalElapsedTime.Elapsed.TotalMilliseconds.ToString() + "ms.\n");
-            if (blockedProcess != null)
-            {
-                currentProcess = blockedProcess;
-                blockedProcess = null;
-            }
-            else currentProcess = null;
+            currentProcess = null;
         }
 
         public bool HasProcess()
@@ -1032,334 +577,145 @@ namespace OS_PROJECT
             return true;
         }
 
-        uint GetLocationWithinCache(uint cacheIndex, uint address)
-        {
-            return ((cpuPCB.DiskAddress + address) % 4);
-        }
+        #region The True Demon's Souls Begins Here
 
-        uint GetCacheLocation(uint address, CacheType ctype) // ONLY CALL IF IN CACHE
+        void WriteToCache(uint data, uint address)
         {
-            if (ctype == CacheType.Input)
-            {
-                if (((cpuPCB.DiskAddress + address) / 4) == cache_input[0].Page)
-                {
-                    return 0;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[1].Page)
-                {
-                    return 1;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[2].Page)
-                {
-                    return 2;
-                }
-                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_input[3].Page)
-                {
-                    return 3;
-                }
+            uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
+            uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
+            if (address < cpuPCB.InstructionLength) // if instruction
+            { 
+                // shouldn't write to instruction cache
+                Console.WriteLine("You're fking up!");
             }
-            else if (ctype == CacheType.Output)
+            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize) // if data
             {
-                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
-                {
-                    return 0;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
-                {
-                    return 1;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
-                {
-                    return 2;
-                }
-                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
-                {
-                    return 3;
-                }
+                // don't write to data cache
+                Console.WriteLine("You're fking up!");
             }
-            else //if (ctype == CacheType.Output)
+            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize) // if output
             {
-                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
-                {
-                    return 0;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
-                {
-                    return 1;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
-                {
-                    return 2;
-                }
-                else //if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
-                {
-                    return 3;
-                }
-            } 
-        }
-
-        bool CheckCacheForPage(uint address, CacheType ctype)
-        {
-            if (ctype == CacheType.Input)
-            {
-                if (((cpuPCB.DiskAddress + address) / 4) == cache_input[0].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[1].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[2].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_input[3].Page)
-                {
-                    return true;
-                }
-                else return false;
-            }
-            else if (ctype == CacheType.Output)
-            {
-                if (((cpuPCB.DiskAddress + address) / 4) == cache_output[0].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[1].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[2].Page)
-                {
-                    return true;
-                }
-                else if (((cpuPCB.DiskAddress + address) / 4) == cache_output[3].Page)
-                {
-                    return true;
-                }
-                else return false;
-            }
-            else return false; // SHOULD NEVER GET HERE.
-        }
-
-        CacheType ReturnCacheTypeFromAddress(uint address)
-        {
-            if (((cpuPCB.DiskAddress + address) < (cpuPCB.DiskAddress + cpuPCB.InstructionLength)))
-            {
-                return CacheType.Instruction;
-            }
-            else if (((cpuPCB.DiskAddress + address) >= (cpuPCB.DiskAddress + cpuPCB.InstructionLength)) && ((cpuPCB.DiskAddress + address) < (cpuPCB.DiskAddress + cpuPCB.InstructionLength) + cpuPCB.InputBufferSize))
-            {
-                return CacheType.Input;
-            }
-            else if (((cpuPCB.DiskAddress + address) >= (cpuPCB.DiskAddress + cpuPCB.InstructionLength) + cpuPCB.InputBufferSize) && ((cpuPCB.DiskAddress + address) < cpuPCB.DiskAddress + cpuPCB.JobLength - cpuPCB.TempBufferSize))
-            {
-                return CacheType.Output;
-            }
-            else
-            {
-                return CacheType.None;
-            }
-        }
-
-        void PageFault(uint neededPage, CacheType cacheType)
-        {
-            SaveProcessStatus();
-            if (first_fault_completed == true)
-            {
-                Process oldBlocked = new Process(new PCB());
-                Process oldCurrent = new Process(new PCB());
-                ServiceBlockedProcess_PageFault(neededPage, cacheType);
-                oldBlocked = blockedProcess;
-                oldCurrent = currentProcess;
-                currentProcess = oldBlocked;
-                blockedProcess = oldCurrent;
-                cpuPCB = currentProcess.PCB;
-                SetCPURegsAndCacheToProcessPCB(currentProcess);
-                faulted = true;
-            }
-            else
-            {
-                blockedProcess = currentProcess;
-                currentProcess = null;
-                faulted = true;
-                first_fault_completed = true;
-            }
-        }
-
-        void ServiceBlockedProcess_PageFault(uint neededPage, CacheType cacheType)
-        {
-            uint frame;
-            if (cacheType == CacheType.Instruction)
-            {
-                frame = MMU.GetFreeFrame(neededPage);
-                cpuPCB.PageTable.table[neededPage].Frame = frame;
-                cpuPCB.PageTable.table[neededPage].InMemory = true;
-                cache_instruction[cache_instruction_counter].Frame = frame;
-                cache_instruction[cache_instruction_counter].Page = neededPage;
-                cache_instruction[cache_instruction_counter++].Data = MMU.ReadFrame(frame);
-                cache_instruction_counter = cache_instruction_counter % 4;
-            }
-            else if (cacheType == CacheType.Input)
-            {
-                frame = MMU.GetFreeFrame(neededPage);
-                cpuPCB.PageTable.table[neededPage].Frame = frame;
-                cpuPCB.PageTable.table[neededPage].InMemory = true;
-                cache_input[cache_input_counter].Frame = frame;
-                cache_input[cache_input_counter].Page = neededPage;
-                cache_input[cache_input_counter++].Data = MMU.ReadFrame(frame);
-                cache_input_counter = cache_input_counter % 4;
-            }
-            else if (cacheType == CacheType.Output)
-            {
-                frame = MMU.GetFreeFrame(neededPage);
-                cpuPCB.PageTable.table[neededPage].Frame = frame;
-                cpuPCB.PageTable.table[neededPage].InMemory = true;
-                cache_output[cache_output_counter].Frame = frame;
-                cache_output[cache_output_counter].Page = neededPage;
-                cache_output[cache_output_counter++].Data = MMU.ReadFrame(frame);
-                cache_output_counter = cache_output_counter % 4;
-            }
-            else if (cacheType == CacheType.None)
-            {
-                frame = MMU.GetFreeFrame(neededPage);
-                cpuPCB.PageTable.table[neededPage].Frame = frame;
-                cpuPCB.PageTable.table[neededPage].InMemory = true;
-            }
-        }
-
-        void IOFault_Read(uint address, CacheType ctype)
-        {
-            SaveProcessStatus();
-            if (first_fault_completed == true)
-            {
-                Process blockedProcessToBeSwappedIn;
-                if (ctype == CacheType.None)
-                {
-                    ServiceBlockedProcess_IOFault_Read(address);
-                }
-                else if (ctype == CacheType.Input)
-                {
-                    ServiceBlockedProcess_IOFault_Read(CacheType.Input, (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].Frame));
-                }
-                else // output
-                {
-                    ServiceBlockedProcess_IOFault_Read(CacheType.Output, (cpuPCB.PageTable.table[(cpuPCB.DiskAddress + address) / 4].Frame));
-                }
-                cpuPCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                if (blockedProcess != null)
-                {
-                    blockedProcessToBeSwappedIn = blockedProcess;
-                    blockedProcess = currentProcess;
-                    currentProcess = blockedProcessToBeSwappedIn;
-                    cpuPCB = currentProcess.PCB;
-                    SetCPURegsAndCacheToProcessPCB(currentProcess);
-                }
-                faulted = true;
-            }
-            else
-            {
-                blockedProcess = currentProcess;
-                faulted = true;
-                first_fault_completed = true;
-                currentProcess = null;
-            }
-            faulted = true;
-        }
-
-        void IOFault_Write(uint data, uint address)
-        {
-            cpuPCB.temp_data = data;
-            cpuPCB.temp_address = address;
-            SaveProcessStatus();
-            if (first_fault_completed == true)
-            {
-                if (blockedProcess != null)
-                {
-                    Process blockedProcessToBeSwappedIn;
-                    ServiceBlockedProcess_IOFault_Write(blockedProcess.PCB.temp_data, cpuPCB.temp_address);
-                    currentProcess.PCB.CurrentExecutionPhase = ExecutionPhase.Fetch;
-                    blockedProcessToBeSwappedIn = blockedProcess;
-                    blockedProcess = currentProcess;
-                    currentProcess = blockedProcessToBeSwappedIn;
-                    cpuPCB = currentProcess.PCB;
-                    SetCPURegsAndCacheToProcessPCB(currentProcess);
-                }
-                faulted = true;
-            }
-            else
-            {
-                blockedProcess = currentProcess;
-                faulted = true;
-                first_fault_completed = true;
-                currentProcess = null;
-            }
-            faulted = true;
-        }
-
-        uint ServiceBlockedProcess_IOFault_Read(uint address)
-        {
-            return MMU.Read(address);
-        }
-
-        void ServiceBlockedProcess_IOFault_Write(uint data, uint address)
-        {
-            MMU.Write(address, data);
-        }
-
-        void ServiceBlockedProcess_IOFault_Read(CacheType ctype, uint frame)
-        {
-            if (ctype == CacheType.Input)
-            {
-                //MMU.WriteCacheFrameToFrame(cache_input[cache_input_counter].Data, cache_input[cache_input_counter].Frame);
-                //cache_input[cache_input_counter++].Data = MMU.ReadFrame(frame);
-                //cache_input_counter = cache_input_counter % 4;
+                // need to check if page frame is in cache.
                 //
-                MMU.WriteCacheFrameToFrame(cache_input[cache_input_counter].Data, cache_input[cache_input_counter].Frame);
-                cache_input[cache_input_counter].Data = MMU.ReadFrame(cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame);
-                cache_input[cache_input_counter].Page = ((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4);
-                cache_input[cache_input_counter++].Frame = cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame;
-                cache_input_counter = cache_input_counter % 4;
+                if (cpuPCB.Cache_Output.HasFrame(frame)) // checking to see if it's in cache
+                {
+                    // if it's in cache, write to it
+                    cpuPCB.Cache_Output.Write(data, address);
+                }
+                // not in cache, check to see if page is in memory
+                if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
+                {
+                    // in memory
+                    if (cpuPCB.Cache_Output.GetCorrespondingFrame(cpuPCB.Cache_Output.CurrentCacheIndex) != 257)
+                    {
+                        MMU.WriteFrame(cpuPCB.Cache_Output.ReadByCache(cpuPCB.Cache_Output.CurrentCacheIndex), cpuPCB.Cache_Output.GetFrame(cpuPCB.Cache_Output.CurrentCacheIndex));
+                    }
+                    cpuPCB.Cache_Output.MapFrame(cpuPCB.Cache_Output.CurrentCacheIndex, frame);
+                    cpuPCB.Cache_Output.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Output.NextFrame());
+                    cpuPCB.Cache_Output.Write(data, address);
+                }
+                // not in memory
+                PageFault(actualPage);
             }
-            else if (ctype == CacheType.Output) // output
+            else // temp AKA no cache
             {
-                //MMU.WriteCacheFrameToFrame(cache_output[cache_output_counter].Data, cache_output[cache_output_counter].Frame);
-                //cache_output[cache_output_counter++].Data = MMU.ReadFrame(frame);
-                //cache_output_counter = cache_output_counter % 4;
-                MMU.WriteCacheFrameToFrame(cache_output[cache_output_counter].Data, cache_output[cache_output_counter].Frame);
-                cache_output[cache_output_counter].Data = MMU.ReadFrame(cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame);
-                cache_output[cache_output_counter].Page = ((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4);
-                cache_output[cache_output_counter++].Frame = cpuPCB.PageTable.table[((cpuPCB.DiskAddress + cpuPCB.ProgramCounter) / 4)].Frame;
-                cache_output_counter = cache_output_counter % 4;
-            }
-            else
-            {
-
+                MMU.Write(address, data);
             }
         }
 
-        void CopyProcessMemoryToDisk()
+        uint ReadFromCache(uint address)
         {
-            uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
-            uint lastPage = (uint)Array.FindLastIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
-            for (uint iterator = firstPage; iterator < lastPage + 1; iterator++)
+            uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
+            uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
+            if (address < cpuPCB.InstructionLength) // if instruction
             {
-                MMU.WriteFrameToPage(cpuPCB.PageTable.table[iterator].Frame, iterator);
+                // need to check if page frame is in cache.
+                //
+                if (cpuPCB.Cache_Instruction.HasFrame(frame)) // checking to see if it's in cache
+                {
+                    // if it's in cache, write to it
+                    return cpuPCB.Cache_Instruction.ReadByAddress(address);
+                }
+                // not in cache, check to see if page is in memory
+                if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
+                {
+                    // in memory -- cpuPCB.Cache_Instruction.GetCorrespondingFrame(cpuPCB.Cache_Instruction.CurrentCacheIndex) != 257)
+                    if (cpuPCB.Cache_Instruction.GetCorrespondingFrame(cpuPCB.Cache_Instruction.CurrentCacheIndex) != 257)
+                    {
+                        MMU.WriteFrame(cpuPCB.Cache_Instruction.ReadByCache(cpuPCB.Cache_Instruction.CurrentCacheIndex), cpuPCB.Cache_Instruction.GetFrame(cpuPCB.Cache_Instruction.CurrentCacheIndex));
+                    }
+                    cpuPCB.Cache_Instruction.MapFrame(cpuPCB.Cache_Instruction.CurrentCacheIndex, frame);
+                    cpuPCB.Cache_Instruction.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Instruction.NextFrame());
+                    return cpuPCB.Cache_Instruction.ReadByAddress(address);
+                }
+                // not in memory
+                PageFault(actualPage);
+                return 0;
+            }
+            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize) // if data
+            {
+                // need to check if page frame is in cache.
+                //
+                if (cpuPCB.Cache_Data.HasFrame(frame)) // checking to see if it's in cache
+                {
+                    // if it's in cache, write to it
+                    return cpuPCB.Cache_Data.ReadByAddress(address);
+                }
+                // not in cache, check to see if page is in memory
+                if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
+                {
+                    // in memory
+                    if (cpuPCB.Cache_Data.GetCorrespondingFrame(cpuPCB.Cache_Data.CurrentCacheIndex) != 257)
+                    {
+                        MMU.WriteFrame(cpuPCB.Cache_Data.ReadByCache(cpuPCB.Cache_Data.CurrentCacheIndex), cpuPCB.Cache_Data.GetFrame(cpuPCB.Cache_Data.CurrentCacheIndex));
+                    }
+                    cpuPCB.Cache_Data.MapFrame(cpuPCB.Cache_Data.CurrentCacheIndex, frame);
+                    cpuPCB.Cache_Data.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Data.NextFrame());
+                    return cpuPCB.Cache_Data.ReadByAddress(address);
+                }
+                // not in memory
+                PageFault(actualPage);
+                return 0;
+            }
+            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize) // if output
+            {
+                // need to check if page frame is in cache.
+                //
+                if (cpuPCB.Cache_Output.HasFrame(frame)) // checking to see if it's in cache
+                {
+                    // if it's in cache, write to it
+                    return cpuPCB.Cache_Output.ReadByAddress(address);
+                }
+                // not in cache, check to see if page is in memory
+                if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
+                {
+                    // in memory
+                    if (cpuPCB.Cache_Output.GetCorrespondingFrame(cpuPCB.Cache_Output.CurrentCacheIndex) != 257)
+                    {
+                        MMU.WriteFrame(cpuPCB.Cache_Output.ReadByCache(cpuPCB.Cache_Output.CurrentCacheIndex), cpuPCB.Cache_Output.GetFrame(cpuPCB.Cache_Output.CurrentCacheIndex));
+                    }
+                    cpuPCB.Cache_Output.MapFrame(cpuPCB.Cache_Output.CurrentCacheIndex, frame);
+                    cpuPCB.Cache_Output.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Output.NextFrame());
+                    return cpuPCB.Cache_Output.ReadByAddress(address);
+                }
+                // not in memory
+                PageFault(actualPage);
+                return 0;
+            }
+            else // temp AKA no cache
+            {
+                return MMU.Read(address);
             }
         }
 
-        void ReturnProcessFramesToMemory()
+        void PageFault(uint page)
         {
-            uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
-            uint lastPage = (uint)Array.FindLastIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
-            for (uint iterator = firstPage; iterator < lastPage + 1; iterator++)
-            {
-                MMU.FreeFrame(cpuPCB.PageTable.table[iterator].Frame);
-                cpuPCB.PageTable.table[iterator].InMemory = false;
-                cpuPCB.PageTable.table[iterator].Frame = 257;
-                cpuPCB.PageTable.table[iterator].IsOwned = false;
-            }
+            cpuPCB.ProgramCounter--;
+            cpuPCB.Interrupt = Interrupt.PageFault;
+            SaveProcessStatus();
+            InterruptHandler.EnqueueProcess(currentProcess, page);
+            currentProcess = null;
         }
+        #endregion
     }
 }

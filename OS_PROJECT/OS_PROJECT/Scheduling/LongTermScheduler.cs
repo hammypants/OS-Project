@@ -37,6 +37,13 @@ namespace OS_PROJECT
             ClearBatch();
         }
 
+        public bool NoMoreProcesses()
+        {
+            if (NPQ.AccessQueue.Count == 0)
+            { return true; }
+            return false;
+        }
+
         void GetBatch()
         {
             int _bl = NPQ.AccessQueue.Count;
@@ -106,7 +113,7 @@ namespace OS_PROJECT
                 uint frame;
                 for (uint iterator = firstPage; iterator < firstPage + 4; iterator++)
                 {
-                    frame = MMU.GetFreeFrame(iterator);
+                    frame = MMU.GetFreeFrame(iterator, p.PCB.ProcessID);
                     if (iterator == firstPage)
                     {
                         p.PCB.MemoryAddress = frame * 4;
@@ -121,5 +128,6 @@ namespace OS_PROJECT
         {
             batchList.Clear();
         }
+        //
     }
 }

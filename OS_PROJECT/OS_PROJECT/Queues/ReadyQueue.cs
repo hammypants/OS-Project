@@ -17,10 +17,6 @@ namespace OS_PROJECT
         public Queue<Process> AccessQueue
         { get { return queue; } set { queue = value; } }
 
-        uint size = 15;
-        public uint Limit
-        { get { return size; } }
-
         public ReadyQueue()
         { }
     }
