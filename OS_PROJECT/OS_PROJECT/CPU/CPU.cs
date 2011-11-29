@@ -20,6 +20,7 @@ namespace OS_PROJECT
 
     class CPU
     {
+        bool faulted = false;
         Driver kernel;
         Disk disk;
         RAM RAM;
@@ -101,8 +102,11 @@ namespace OS_PROJECT
                 }
                 while (HasProcess())
                 {
+                    faulted = false;
                     Fetch();
+                    if (!faulted)
                     Decode();
+                    if (!faulted)
                     Execute();
                 }
             }
@@ -136,6 +140,14 @@ namespace OS_PROJECT
 
         void FillInitalCache()
         {
+            //cache = new uint[currentProcess.PCB.JobLength];
+            //lock (cacheLock)
+            //{
+            //    for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
+            //    {
+            //        cache[iterator] = RAM.ReadDataFromMemory(currentProcess.PCB.MemoryAddress + iterator);
+            //    }
+            //}
             lock (cacheLock)
             {
                 uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
@@ -153,6 +165,8 @@ namespace OS_PROJECT
         {
             //currentInstruction = SystemCaller.ConvertInputDataToHexstring(cache[cpuPCB.ProgramCounter++]);
             currentInstruction = SystemCaller.ConvertInputDataToHexstring(ReadFromCache(cpuPCB.ProgramCounter++));
+            if (currentProcess == null)
+                faulted = true;
         }
 
         void Decode()
@@ -297,25 +311,25 @@ namespace OS_PROJECT
                         cpuPCB.reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         cpuPCB.reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        cpuPCB.address += cpuPCB.SeparationOffset;
+                        //cpuPCB.address += cpuPCB.SeparationOffset;
                     }
                     else if (currentInstructionOp == Instruction.WR)
                     {
                         cpuPCB.reg1 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                         cpuPCB.reg2 = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                         cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4)) / 4;
-                        cpuPCB.address += cpuPCB.SeparationOffset;
+                        //cpuPCB.address += cpuPCB.SeparationOffset;
                     }
                     break;
                 case InstructionType.I:
                     cpuPCB.breg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 1));
                     cpuPCB.dreg = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(1, 1));
                     cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(2, 4));
-                    cpuPCB.address += cpuPCB.SeparationOffset;
+                    //cpuPCB.address += cpuPCB.SeparationOffset;
                     break;
                 case InstructionType.J:
                     cpuPCB.address = SystemCaller.ConvertHexstringToUInt(currentInstructionCopy.Substring(0, 6)) / 4;
-                    cpuPCB.address += cpuPCB.SeparationOffset;
+                    //cpuPCB.address += cpuPCB.SeparationOffset;
                     break;
                 case InstructionType.NOP:
                     break;
@@ -588,19 +602,20 @@ namespace OS_PROJECT
                 // shouldn't write to instruction cache
                 Console.WriteLine("You're fking up!");
             }
-            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize) // if data
+            address += cpuPCB.SeparationOffset;
+            if (address + cpuPCB.SeparationOffset < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.SeparationOffset) // if data
             {
                 // don't write to data cache
                 Console.WriteLine("You're fking up!");
             }
-            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize) // if output
+            else if (address + cpuPCB.SeparationOffset < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize + cpuPCB.SeparationOffset) // if output
             {
                 // need to check if page frame is in cache.
                 //
                 if (cpuPCB.Cache_Output.HasFrame(frame)) // checking to see if it's in cache
                 {
                     // if it's in cache, write to it
-                    cpuPCB.Cache_Output.Write(data, address);
+                    cpuPCB.Cache_Output.Write(data, address + cpuPCB.SeparationOffset);
                 }
                 // not in cache, check to see if page is in memory
                 if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
@@ -612,14 +627,14 @@ namespace OS_PROJECT
                     }
                     cpuPCB.Cache_Output.MapFrame(cpuPCB.Cache_Output.CurrentCacheIndex, frame);
                     cpuPCB.Cache_Output.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Output.NextFrame());
-                    cpuPCB.Cache_Output.Write(data, address);
+                    cpuPCB.Cache_Output.Write(data, address + cpuPCB.SeparationOffset);
                 }
                 // not in memory
                 PageFault(actualPage);
             }
             else // temp AKA no cache
             {
-                MMU.Write(address, data);
+                MMU.Write(address + cpuPCB.SeparationOffset, data);
             }
         }
 
@@ -652,14 +667,14 @@ namespace OS_PROJECT
                 PageFault(actualPage);
                 return 0;
             }
-            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize) // if data
+            if (address + cpuPCB.SeparationOffset < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.SeparationOffset) // if data
             {
                 // need to check if page frame is in cache.
                 //
                 if (cpuPCB.Cache_Data.HasFrame(frame)) // checking to see if it's in cache
                 {
                     // if it's in cache, write to it
-                    return cpuPCB.Cache_Data.ReadByAddress(address);
+                    return cpuPCB.Cache_Data.ReadByAddress(address + cpuPCB.SeparationOffset);
                 }
                 // not in cache, check to see if page is in memory
                 if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
@@ -671,20 +686,20 @@ namespace OS_PROJECT
                     }
                     cpuPCB.Cache_Data.MapFrame(cpuPCB.Cache_Data.CurrentCacheIndex, frame);
                     cpuPCB.Cache_Data.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Data.NextFrame());
-                    return cpuPCB.Cache_Data.ReadByAddress(address);
+                    return cpuPCB.Cache_Data.ReadByAddress(address + cpuPCB.SeparationOffset);
                 }
                 // not in memory
                 PageFault(actualPage);
                 return 0;
             }
-            else if (address < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize) // if output
+            else if (address + cpuPCB.SeparationOffset < cpuPCB.InstructionLength + cpuPCB.InputBufferSize + cpuPCB.OutputBufferSize + cpuPCB.SeparationOffset) // if output
             {
                 // need to check if page frame is in cache.
                 //
                 if (cpuPCB.Cache_Output.HasFrame(frame)) // checking to see if it's in cache
                 {
                     // if it's in cache, write to it
-                    return cpuPCB.Cache_Output.ReadByAddress(address);
+                    return cpuPCB.Cache_Output.ReadByAddress(address + cpuPCB.SeparationOffset);
                 }
                 // not in cache, check to see if page is in memory
                 if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
@@ -696,7 +711,7 @@ namespace OS_PROJECT
                     }
                     cpuPCB.Cache_Output.MapFrame(cpuPCB.Cache_Output.CurrentCacheIndex, frame);
                     cpuPCB.Cache_Output.Write(MMU.ReadFrame(frame), cpuPCB.Cache_Output.NextFrame());
-                    return cpuPCB.Cache_Output.ReadByAddress(address);
+                    return cpuPCB.Cache_Output.ReadByAddress(address + cpuPCB.SeparationOffset);
                 }
                 // not in memory
                 PageFault(actualPage);
@@ -704,7 +719,7 @@ namespace OS_PROJECT
             }
             else // temp AKA no cache
             {
-                return MMU.Read(address);
+                return MMU.Read(address + cpuPCB.SeparationOffset);
             }
         }
 

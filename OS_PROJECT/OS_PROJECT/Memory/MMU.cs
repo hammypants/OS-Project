@@ -38,6 +38,10 @@ namespace OS_PROJECT
         }
 
         // WRITE A METHOD TO SEARCH FOR THE FRAME THAT HAS A PAGE HERE
+        public static uint CorrespondingPage(uint frame)
+        {
+            return FrameTable[frame].Page;
+        }
 
         public static uint Read(uint address)
         {
