@@ -43,6 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CPU\Cache.cs" />
     <Compile Include="CPU\CPU.cs" />
     <Compile Include="Kernel Stuff\Driver.cs" />
     <Compile Include="Kernel Stuff\InterruptHandler.cs" />
@@ -54,16 +55,15 @@
     <Compile Include="Queues\ReadyQueue.cs" />
     <Compile Include="Queues\WaitingQueue.cs" />
     <Compile Include="Scheduling\ContextSwitcher.cs" />
-    <Compile Include="Memory\Disk.cs" />
+    <Compile Include="Shared Memory\Disk.cs" />
     <Compile Include="Scheduling\Dispatcher.cs" />
     <Compile Include="Kernel Stuff\OS.cs" />
     <Compile Include="Kernel Stuff\Loader.cs" />
     <Compile Include="Scheduling\LongTermScheduler.cs" />
     <Compile Include="Processes\Process.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Memory\MMU.cs" />
-    <Compile Include="Memory\RAM.cs" />
-    <Compile Include="Scheduling\ShortTermScheduler.cs" />
+    <Compile Include="Shared Memory\MMU.cs" />
+    <Compile Include="Shared Memory\RAM.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="DataFile1.txt" />

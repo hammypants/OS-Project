@@ -45,7 +45,7 @@ namespace OS_PROJECT
 
             //Read the file
             StreamReader file = new StreamReader(//@"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\DataFile2.txt");
-                @"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\DataFile1.txt");
+                @"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\DataFile2.txt");
 
             while ((line = file.ReadLine()) != null)
             {

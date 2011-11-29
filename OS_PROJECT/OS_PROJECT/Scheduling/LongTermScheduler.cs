@@ -67,7 +67,7 @@ namespace OS_PROJECT
                         p.PCB._waitingTime.Start();
                     }
                     break;
-                case("SJF"):
+                case ("SJF"):
                     batchList.Sort(CompareJob);
                     foreach (Process p in batchList)
                     {

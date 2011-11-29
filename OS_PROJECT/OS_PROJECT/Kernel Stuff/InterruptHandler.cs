@@ -10,7 +10,6 @@ namespace OS_PROJECT
     {
         PageFault, IOFault, None
     }
-
     static class InterruptHandler
     {
         public static Thread thread = new Thread(new ThreadStart(Run));
@@ -19,6 +18,9 @@ namespace OS_PROJECT
 
         static Queue<Process> BlockedQueue = new Queue<Process>();
         static Queue<uint> NeededPages = new Queue<uint>();
+
+        static uint Serviced = 0;
+        static uint Enqueued = 0;
 
         static Queue<Process> ServicedQueue = new Queue<Process>();
 
@@ -42,6 +44,8 @@ namespace OS_PROJECT
                         BlockedQueue.ElementAt<Process>(0).PCB.PageTable.table[NeededPages.ElementAt<uint>(0)].IsOwned = true;
                         ServicedQueue.Enqueue(BlockedQueue.Dequeue());
                         NeededPages.Dequeue();
+                        Serviced++;
+                        Enqueued--;
                     }
                 }
             }
@@ -49,7 +53,20 @@ namespace OS_PROJECT
 
         public static uint ServicedProcessesCount()
         {
-            return (uint)ServicedQueue.Count;
+            //return (uint)ServicedQueue.Count;
+            lock (Lock)
+            {
+                return Serviced;
+            }
+        }
+
+        public static uint EnqueuedProcessesCount()
+        {
+            //return (uint)BlockedQueue.Count;
+            lock (Lock)
+            {
+                return Enqueued;
+            }
         }
 
         public static void EnqueueProcess(Process p, uint page)
@@ -58,6 +75,7 @@ namespace OS_PROJECT
             {
                 NeededPages.Enqueue(page);
                 BlockedQueue.Enqueue(p);
+                Enqueued++;
             }
         }
 
@@ -65,6 +83,7 @@ namespace OS_PROJECT
         {
             lock (Lock)
             {
+                Serviced--;
                 return ServicedQueue.Dequeue();
             }
         }
