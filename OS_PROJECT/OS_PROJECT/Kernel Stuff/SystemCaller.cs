@@ -55,13 +55,80 @@ namespace OS_PROJECT
             }
         }
 
-        public static void CoreDump(Driver k, int batchNumber)
+        public static void DiskDump(Driver k)
+        {
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\Phase Two Dumps\DiskDump.txt", false);
+            //Console.WriteLine("Writing disk to file...");
+            for (uint page = 0; page < 512; page++)
+            {
+                for (uint offset = 0; offset < 4; offset++)
+                {
+                    if (page < 10)
+                    {
+                        writer.Write("[00" + page + "]");
+                    }
+                    else if (page < 100)
+                    {
+                        writer.Write("[0" + page + "]");
+                    }
+                    else
+                    {
+                        writer.Write("[" + page + "]");
+                    }
+                    writer.Write("[" + offset + "]");
+                    writer.Write("[" + SystemCaller.ConvertInputDataToHexstring(k.Disk.ReadDataFromDisk((page * 4) + offset)) + "]");
+                    writer.WriteLine();
+                }
+            }
+            writer.Close();
+        }
+
+        public static void ProcessMemoryDump(Driver k, PCB pcb)
+        {
+            lock (fileLock)
+            {
+                StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\Phase Two Dumps\Process" + pcb.ProcessID + "MemoryDump.txt", false);
+                //Console.WriteLine("Writing process memory to file...");
+                uint beginning_page = pcb.PageTable.ReturnFirstPage(pcb);
+                uint number_of_pages = pcb.JobLength / 4;
+                uint frame_to_write;
+                for (uint page = beginning_page; page < beginning_page + number_of_pages + 1; page++)
+                {
+                    frame_to_write = pcb.PageTable.table[page].Frame;
+                    for (uint offset = 0; offset < 4; offset++)
+                    {
+                        if (frame_to_write < 10)
+                        {
+                            writer.Write("[00" + frame_to_write + "]");
+                        }
+                        else if (frame_to_write < 100)
+                        {
+                            writer.Write("[0" + frame_to_write + "]");
+                        }
+                        else
+                        {
+                            writer.Write("[" + frame_to_write + "]");
+                        }
+                        writer.Write("[" + offset + "]");
+                        if (pcb.PageTable.Lookup(page).InMemory)
+                        {
+                            writer.Write("[" + SystemCaller.ConvertInputDataToHexstring(MMU.Read((frame_to_write * 4) + offset)) + "]");
+                        }
+                        else writer.Write("[0]");
+                        writer.WriteLine();
+                    }
+                }
+                writer.Close();
+            }
+        }
+
+        public static void CoreDump(Driver k)
         {
             StreamWriter writer = new StreamWriter(//@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
-                @"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDumpBatch" + batchNumber + ".txt", false);
+                @"\\cse6\student\crichers\OS-Project\OS_PROJECT\OS_PROJECT\CoreDump.txt", false);
             Console.WriteLine("--------------------------------------");
             Console.WriteLine("CORE DUMP -- WRITING MEMORY TO FILE:");
-            Console.WriteLine("CoreDumpBatch" + batchNumber + ".txt");
+            Console.WriteLine("CoreDump.txt");
             Console.WriteLine("--------------------------------------");
             for (uint i = 0; i < k.RAM.GetMemorySize(); i++)
             {
@@ -154,26 +221,6 @@ namespace OS_PROJECT
                 uint _uint = r.ReadDataFromMemory((uint)iterator);
                 string _data = String.Format("{0:X}", _uint);
                 Console.WriteLine(_data);
-            }
-        }
-
-        public static void WriteToFile(string s)
-        {
-            lock (fileLock)
-            {
-                StreamWriter file = File.AppendText("osProj.txt");
-                file.WriteLine(s);
-                file.Close();
-            }
-        }
-
-        public static void WriteRAMToFile(RAM r)
-        {
-            lock (anotherFileLock)
-            {
-                StreamWriter file = File.AppendText("osProj.txt");
-                file.WriteLine(r);
-                file.Close();
             }
         }
 

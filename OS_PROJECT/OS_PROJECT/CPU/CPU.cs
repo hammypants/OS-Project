@@ -144,7 +144,7 @@ namespace OS_PROJECT
                         Console.WriteLine("Job " + currentProcess.PCB.ProcessID + " (Priority: " + currentProcess.PCB.Priority + " | Instr. Length: " + currentProcess.PCB.InstructionLength +
                             ") spent " + cpuPCB._waitingTime.Elapsed.TotalMilliseconds.ToString() + "ms waiting.\n");
                         processCounter++;
-                        //FillInitalCache();
+                        FillInitalCache();
                         totalElapsedTime.Start();
                     }
                 }
@@ -161,24 +161,28 @@ namespace OS_PROJECT
 
         void FillInitalCache()
         {
-            //cache = new uint[currentProcess.PCB.JobLength];
-            //lock (cacheLock)
-            //{
-            //    for (uint iterator = 0; iterator < cache.GetLength(0); iterator++)
-            //    {
-            //        cache[iterator] = RAM.ReadDataFromMemory(currentProcess.PCB.MemoryAddress + iterator);
-            //    }
-            //}
             lock (cacheLock)
             {
-                uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
-                uint frame;
-                for (uint i = 0; i < 4; i++)
+                //uint firstPage = (uint)Array.FindIndex<PageTable.PageTableLocation>(cpuPCB.PageTable.table, e => e.IsOwned == true);
+                //uint frame;
+                //for (uint i = 0; i < 4; i++)
+                //{
+                //    frame = cpuPCB.PageTable.table[firstPage + i].Frame;
+                //    cpuPCB.Instruction.Frames[i].FrameData = MMU.ReadFrame(frame);
+                //    cpuPCB.Instruction.Frames[i].Frame = frame;
+                //    cpuPCB.Instruction.Frames[i].Page = firstPage + i;
+                //}
+                uint beginning_page = cpuPCB.PageTable.ReturnFirstPage(cpuPCB);
+                uint num_of_pages = 4;
+                uint index = 0;
+                uint frame_to_write;
+                for (uint i = beginning_page; i < beginning_page + num_of_pages; i++)
                 {
-                    frame = cpuPCB.PageTable.table[firstPage + i].Frame;
-                    cpuPCB.Instruction.Frames[i].FrameData = MMU.ReadFrame(frame);
-                    cpuPCB.Instruction.Frames[i].Frame = frame;
-                    cpuPCB.Instruction.Frames[i].Page = firstPage + i;
+                    frame_to_write = cpuPCB.PageTable.table[i].Frame;
+                    cpuPCB.Instruction.Frames[index].FrameData = MMU.ReadFrame(frame_to_write);
+                    cpuPCB.Instruction.Frames[index].Frame = frame_to_write;
+                    cpuPCB.Instruction.Frames[index].Page = i;
+                    index++;
                 }
             }
         }
@@ -636,6 +640,8 @@ namespace OS_PROJECT
             cpuPCB.completionTime = totalElapsedTime.Elapsed.TotalMilliseconds;
             SaveProcessStatus();
             WriteProcessToDisk();
+            // massive overhead, turn off for real system wait times
+            SystemCaller.ProcessMemoryDump(kernel, currentProcess.PCB);
             FreeProcessFrames();
             kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
@@ -657,10 +663,12 @@ namespace OS_PROJECT
             currentProcess = null;
         }
 
+        #region Non-cache functions
+
         void WriteToCache(uint address, uint data)
         {
-            CacheType location = DetermineCache(address);
-            if (location != CacheType.Instruction)
+            CacheType Cache = DetermineCache(address);
+            if (Cache != CacheType.Instruction)
                 address += cpuPCB.SeparationOffset;
             uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
             uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
@@ -677,8 +685,8 @@ namespace OS_PROJECT
 
         uint ReadFromCache(uint address, uint unchanged)
         {
-            CacheType location = DetermineCache(address);
-            if (location != CacheType.Instruction)
+            CacheType Cache = DetermineCache(address);
+            if (Cache != CacheType.Instruction)
                 address += cpuPCB.SeparationOffset;
             uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
             uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
@@ -694,17 +702,20 @@ namespace OS_PROJECT
             }
         }
 
+        #endregion
+
+        #region Cache Functions
+
         //void WriteToCache(uint address, uint data)
         //{
-        //    uint actualPage;// = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
-        //    uint frame;// = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //    uint offset;
         //    CacheType Cache = DetermineCache(address);
+        //    if (Cache != CacheType.Instruction)
+        //        address += cpuPCB.SeparationOffset;
+        //    uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
+        //    uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
+        //    uint offset = (address) % 4;
         //    if (Cache == CacheType.Instruction)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = address % 4;
         //        if (cpuPCB.Instruction.HasPage(actualPage))
         //        {
         //            cpuPCB.Instruction.Write(data, frame, offset);
@@ -729,9 +740,6 @@ namespace OS_PROJECT
         //    }
         //    else if (Cache == CacheType.Input)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.Input.HasPage(actualPage))
         //        {
         //            cpuPCB.Input.Write(data, frame, offset);
@@ -756,9 +764,6 @@ namespace OS_PROJECT
         //    }
         //    else if (Cache == CacheType.Output)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.Output.HasPage(actualPage))
         //        {
         //            cpuPCB.Output.Write(data, frame, offset);
@@ -783,12 +788,9 @@ namespace OS_PROJECT
         //    }
         //    else
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
         //        {
-        //            MMU.Write(cpuPCB.MemoryAddress + address, data);
+        //            MMU.Write((frame * 4) + offset, data);
         //        }
         //        else
         //        {
@@ -797,17 +799,16 @@ namespace OS_PROJECT
         //    }
         //}
 
-        //uint ReadFromCache(uint address)
+        //uint ReadFromCache(uint address, uint unchanged)
         //{
-        //    uint actualPage;// = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
-        //    uint frame;// = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //    uint offset;
         //    CacheType Cache = DetermineCache(address);
+        //    if (Cache != CacheType.Instruction)
+        //        address += cpuPCB.SeparationOffset;
+        //    uint actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
+        //    uint frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
+        //    uint offset = (address) % 4;
         //    if (Cache == CacheType.Instruction)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + (address / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = address % 4;
         //        if (cpuPCB.Instruction.HasPage(actualPage))
         //        {
         //            return cpuPCB.Instruction.Read(frame, offset);
@@ -820,22 +821,19 @@ namespace OS_PROJECT
         //                cpuPCB.Instruction.Frames[cpuPCB.Instruction.Indexer].FrameData = MMU.ReadFrame(frame);
         //                cpuPCB.Instruction.Frames[cpuPCB.Instruction.Indexer].Frame = frame;
         //                cpuPCB.Instruction.Frames[cpuPCB.Instruction.Indexer].Page = actualPage;
-        //                cpuPCB.Instruction.Indexer++; 
+        //                cpuPCB.Instruction.Indexer++;
         //                cpuPCB.Instruction.Indexer %= 4;
         //                return cpuPCB.Instruction.Read(frame, offset);
         //            }
         //            else
         //            {
         //                PageFault(actualPage);
-        //                return 0;
+        //                return unchanged;
         //            }
         //        }
         //    }
         //    else if (Cache == CacheType.Input)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.Input.HasPage(actualPage))
         //        {
         //            return cpuPCB.Input.Read(frame, offset);
@@ -855,15 +853,12 @@ namespace OS_PROJECT
         //            else
         //            {
         //                PageFault(actualPage);
-        //                return 0;
+        //                return unchanged;
         //            }
         //        }
         //    }
         //    else if (Cache == CacheType.Output)
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.Output.HasPage(actualPage))
         //        {
         //            return cpuPCB.Output.Read(frame, offset);
@@ -883,26 +878,25 @@ namespace OS_PROJECT
         //            else
         //            {
         //                PageFault(actualPage);
-        //                return 0;
+        //                return unchanged;
         //            }
         //        }
         //    }
         //    else
         //    {
-        //        actualPage = cpuPCB.PageTable.ReturnFirstPage(cpuPCB) + ((address + cpuPCB.SeparationOffset) / 4);
-        //        frame = cpuPCB.PageTable.Lookup(actualPage).Frame;
-        //        offset = (address + cpuPCB.SeparationOffset) % 4;
         //        if (cpuPCB.PageTable.Lookup(actualPage).InMemory)
         //        {
-        //            return MMU.Read(cpuPCB.MemoryAddress + address);
+        //            return MMU.Read((frame * 4) + offset);
         //        }
         //        else
         //        {
         //            PageFault(actualPage);
-        //            return 0;
+        //            return unchanged;
         //        }
         //    }
         //}
+
+        #endregion
 
         CacheType DetermineCache(uint address)
         {
