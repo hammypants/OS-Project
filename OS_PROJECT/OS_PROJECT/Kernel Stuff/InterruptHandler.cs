@@ -83,8 +83,12 @@ namespace OS_PROJECT
         {
             lock (Lock)
             {
-                Serviced--;
-                return ServicedQueue.Dequeue();
+                if (Serviced != 0)
+                {
+                    Serviced--;
+                    return ServicedQueue.Dequeue();
+                }
+                else return null;
             }
         }
     }

@@ -10,6 +10,8 @@ namespace OS_PROJECT
         Driver kernal;
         ReadyQueue RQ;
 
+        Object Lock = new Object();
+
         public Dispatcher(Driver k)
         {
             kernal = k;
@@ -18,16 +20,15 @@ namespace OS_PROJECT
 
         public void DispatchProcess(CPU cpu)
         {
-            if (RQ.AccessQueue.Count != 0)
+            lock (Lock)
             {
-                cpu.CurrentProcess = RQ.AccessQueue.Dequeue();
-                cpu.CPU_PCB = cpu.CurrentProcess.PCB;
+                if (RQ.AccessQueue.Count != 0)
+                {
+                    cpu.CurrentProcess = RQ.AccessQueue.Dequeue();
+                    if (cpu.CurrentProcess != null)
+                        cpu.CPU_PCB = cpu.CurrentProcess.PCB;
+                }
             }
-        }
-
-        public void SwapOut(CPU cpu)
-        {
-
         }
     }
 }

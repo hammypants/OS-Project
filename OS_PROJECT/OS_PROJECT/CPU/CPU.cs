@@ -151,7 +151,10 @@ namespace OS_PROJECT
                 else
                 {
                     currentProcess = InterruptHandler.DequeueProcess();
-                    cpuPCB = currentProcess.PCB;
+                    if (currentProcess != null)
+                    {
+                        cpuPCB = currentProcess.PCB;
+                    }
                 }
             }
         }
