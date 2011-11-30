@@ -44,6 +44,8 @@ namespace OS_PROJECT
         public uint IoCount
         { get { return ioCount; } set { ioCount = value; } }
 
+        public uint PageFaultCount = 0;
+
         uint processID = 0;
         public uint ProcessID
         {

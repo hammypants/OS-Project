@@ -41,7 +41,7 @@ namespace OS_PROJECT
         Loader loader;
         LongTermScheduler LTS;
 
-        int numberOfCPUs = 1;
+        int numberOfCPUs = 4;
         List<CPU> cpuList;
 
         bool shouldRun = true;
@@ -105,6 +105,7 @@ namespace OS_PROJECT
                 }
             }
             SystemCaller.DiskDump(this);
+            SystemCaller.ProcessCmpltWaitTimesDump(this);
         }
 
         void RunCPUs()

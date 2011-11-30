@@ -641,7 +641,7 @@ namespace OS_PROJECT
             SaveProcessStatus();
             WriteProcessToDisk();
             // massive overhead, turn off for real system wait times
-            SystemCaller.ProcessMemoryDump(kernel, currentProcess.PCB);
+            //SystemCaller.ProcessMemoryDump(kernel, currentProcess.PCB);
             FreeProcessFrames();
             kernel.deadProcesses.Add(currentProcess);
             Console.WriteLine("Process " + cpuPCB.ProcessID + " used " + cpuPCB.IoCount + " I/O calls.");
@@ -658,6 +658,8 @@ namespace OS_PROJECT
         void PageFault(uint page)
         {
             cpuPCB.ProgramCounter--;
+            cpuPCB.IoCount--;
+            cpuPCB.PageFaultCount++;
             SaveProcessStatus();
             InterruptHandler.EnqueueProcess(currentProcess, page);
             currentProcess = null;

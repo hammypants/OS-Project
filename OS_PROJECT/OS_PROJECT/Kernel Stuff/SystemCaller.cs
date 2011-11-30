@@ -198,18 +198,24 @@ namespace OS_PROJECT
             writer.Close();
         }
 
-        public static void CoreDumpProcessCompletionWaitingTimes(Driver k, int batchNumber)
+        public static void ProcessCmpltWaitTimesDump(Driver k)
         {
-            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDump-CompTimes" + batchNumber + ".txt", true);
+            StreamWriter writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\Phase Two Dumps\ProcessCompletionTimes.txt", true);
             foreach (Process p in k.deadProcesses)
             {
-                writer.WriteLine(p.PCB.ProcessID + " , " + p.PCB.completionTime);
+                writer.WriteLine("[" + p.PCB.ProcessID + "][" + p.PCB.completionTime +"]");
             }
             writer.Close();
-            writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\CoreDump-WaitTimes" + batchNumber + ".txt", true);
+            writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\Phase Two Dumps\ProcessWaitTimes.txt", true);
             foreach (Process p in k.deadProcesses)
             {
-                writer.WriteLine(p.PCB.ProcessID + " , " + p.PCB.waitingTime);
+                writer.WriteLine("[" + p.PCB.ProcessID + "][" + p.PCB.waitingTime + "]");
+            }
+            writer.Close();
+            writer = new StreamWriter(@"C:\Users\Cory\Documents\Visual Studio 2010\Projects\GitProjects\OS-Project\OS_PROJECT\OS_PROJECT\Phase Two Dumps\ProcessPageFaults.txt", false);
+            foreach (Process p in k.deadProcesses)
+            {
+                writer.WriteLine("[" + p.PCB.ProcessID + "][" + p.PCB.PageFaultCount + "]");
             }
             writer.Close();
         }
